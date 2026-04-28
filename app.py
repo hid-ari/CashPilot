@@ -1,6 +1,7 @@
 import json
 import os
 import uuid
+from datetime import datetime
 
 import pandas as pd
 import streamlit as st
@@ -284,6 +285,7 @@ MP_DATA_FILES = {
     "fixed": os.path.join(BASE_DIR, "gastos_fijos.json"),
     "variable": os.path.join(BASE_DIR, "gastos_variables.json"),
     "income": os.path.join(BASE_DIR, "ingresos.json"),
+    "monthly": os.path.join(BASE_DIR, "resumen_mensual.json"),
 }
 
 
@@ -334,6 +336,28 @@ def mp_save_rows(file_key, df, drop_cols):
         json.dump(payload, fh, ensure_ascii=False, indent=2)
 
 
+def mp_load_monthly_rows():
+    file_path = MP_DATA_FILES["monthly"]
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            df = pd.DataFrame(data)
+            if df.empty:
+                return pd.DataFrame(columns=["Mes", "Ingresos", "Gastos fijos", "Gastos variables", "Presupuesto", "Balance", "Guardado"])
+            return df
+        except Exception:
+            pass
+    return pd.DataFrame(columns=["Mes", "Ingresos", "Gastos fijos", "Gastos variables", "Presupuesto", "Balance", "Guardado"])
+
+
+def mp_save_monthly_rows(df):
+    file_path = MP_DATA_FILES["monthly"]
+    payload = df.to_dict(orient="records")
+    with open(file_path, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False, indent=2)
+
+
 def mp_currency(amount):
     return f"DOP {amount:,.2f}"
 
@@ -345,6 +369,8 @@ def mp_init_state():
         st.session_state.mp_variable_rows_df = mp_load_rows("variable", MP_DEFAULT_VARIABLE_ROWS, mp_normalize_expense_rows)
     if "mp_income_rows_df" not in st.session_state:
         st.session_state.mp_income_rows_df = mp_load_rows("income", MP_DEFAULT_INCOME_ROWS, mp_normalize_income_rows)
+    if "mp_monthly_rows_df" not in st.session_state:
+        st.session_state.mp_monthly_rows_df = mp_load_monthly_rows()
 
 
 def mp_add_blank_expense_row(state_key):
@@ -600,6 +626,11 @@ def mp_home_page():
     total_expenses = fixed_actual + variable_actual
     balance = income_total - total_expenses
 
+    current_month = datetime.now().strftime("%Y-%m")
+    current_saved_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    st.title("CashPilot")
+    st.caption("Dashboard financiero personal")
     st.header("Dashboard")
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Ingresos", mp_currency(income_total))
@@ -607,6 +638,28 @@ def mp_home_page():
     c3.metric("Gastos variables", mp_currency(variable_actual))
     c4.metric("Presupuesto", mp_currency(total_budget))
     c5.metric("Balance", mp_currency(balance))
+
+    save_col, info_col = st.columns([1, 4])
+    with save_col:
+        if st.button("Guardar mes", key="save_month_button"):
+            monthly_df = st.session_state.mp_monthly_rows_df.copy()
+            record = {
+                "Mes": current_month,
+                "Ingresos": income_total,
+                "Gastos fijos": fixed_actual,
+                "Gastos variables": variable_actual,
+                "Presupuesto": total_budget,
+                "Balance": balance,
+                "Guardado": current_saved_at,
+            }
+            if not monthly_df.empty and "Mes" in monthly_df.columns and current_month in monthly_df["Mes"].astype(str).values:
+                monthly_df = monthly_df[monthly_df["Mes"].astype(str) != current_month]
+            monthly_df = pd.concat([monthly_df, pd.DataFrame([record])], ignore_index=True)
+            st.session_state.mp_monthly_rows_df = monthly_df
+            mp_save_monthly_rows(monthly_df)
+            st.success("Mes guardado en el historial.")
+    with info_col:
+        st.info(f"Mes actual: {current_month}")
 
     st.divider()
     st.subheader("Gráfica resumen")
@@ -662,6 +715,17 @@ def mp_home_page():
         else:
             st.info("No hay presupuesto registrado.")
 
+    st.divider()
+    st.subheader("Resumen mensual guardado")
+    monthly_df = st.session_state.mp_monthly_rows_df.copy()
+    if monthly_df.empty:
+        st.info("Todavía no has guardado ningún mes.")
+    else:
+        display_monthly = monthly_df.copy()
+        for col in ["Ingresos", "Gastos fijos", "Gastos variables", "Presupuesto", "Balance"]:
+            display_monthly[col] = display_monthly[col].apply(mp_currency)
+        st.dataframe(display_monthly.sort_values(by="Mes", ascending=False), use_container_width=True, hide_index=True)
+
 
 def mp_sidebar_page():
     st.sidebar.title("Navegación")
@@ -669,7 +733,7 @@ def mp_sidebar_page():
 
 
 def main():
-    st.set_page_config(page_title="Control de gastos", layout="wide")
+    st.set_page_config(page_title="CashPilot", layout="wide")
     mp_init_state()
 
     page = mp_sidebar_page()
