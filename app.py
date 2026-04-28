@@ -274,17 +274,22 @@ MP_EXPENSE_CATEGORIES = [
 
 MP_INCOME_CATEGORIES = ["Trabajo", "Mesada", "Negocio", "Inversiones", "Regalos", "Otros"]
 
+MP_SAVINGS_CATEGORIES = ["Emergencia", "Viajes", "Inversión", "Meta personal", "Otros"]
+
 MP_DEFAULT_FIXED_ROWS = []
 
 MP_DEFAULT_VARIABLE_ROWS = []
 
 MP_DEFAULT_INCOME_ROWS = []
 
+MP_DEFAULT_SAVINGS_ROWS = []
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MP_DATA_FILES = {
     "fixed": os.path.join(BASE_DIR, "gastos_fijos.json"),
     "variable": os.path.join(BASE_DIR, "gastos_variables.json"),
     "income": os.path.join(BASE_DIR, "ingresos.json"),
+    "savings": os.path.join(BASE_DIR, "ahorros.json"),
     "monthly": os.path.join(BASE_DIR, "resumen_mensual.json"),
 }
 
@@ -316,6 +321,18 @@ def mp_normalize_income_rows(rows):
     df["Descripcion"] = df.get("Descripcion", pd.Series(dtype=str)).fillna("").astype(str)
     df["Ingreso"] = pd.to_numeric(df.get("Ingreso", 0), errors="coerce").fillna(0.0)
     return df[["row_id", "Categoria", "Descripcion", "Ingreso"]]
+
+
+def mp_normalize_savings_rows(rows):
+    df = pd.DataFrame(rows)
+    if df.empty:
+        df = pd.DataFrame(columns=["row_id", "Categoria", "Descripcion", "Ahorro"])
+    if "row_id" not in df.columns:
+        df.insert(0, "row_id", [mp_new_id() for _ in range(len(df))])
+    df["Categoria"] = df.get("Categoria", pd.Series(dtype=str)).fillna("").astype(str)
+    df["Descripcion"] = df.get("Descripcion", pd.Series(dtype=str)).fillna("").astype(str)
+    df["Ahorro"] = pd.to_numeric(df.get("Ahorro", 0), errors="coerce").fillna(0.0)
+    return df[["row_id", "Categoria", "Descripcion", "Ahorro"]]
 
 
 def mp_load_rows(file_key, default_rows, normalizer):
@@ -369,6 +386,8 @@ def mp_init_state():
         st.session_state.mp_variable_rows_df = mp_load_rows("variable", MP_DEFAULT_VARIABLE_ROWS, mp_normalize_expense_rows)
     if "mp_income_rows_df" not in st.session_state:
         st.session_state.mp_income_rows_df = mp_load_rows("income", MP_DEFAULT_INCOME_ROWS, mp_normalize_income_rows)
+    if "mp_savings_rows_df" not in st.session_state:
+        st.session_state.mp_savings_rows_df = mp_load_rows("savings", MP_DEFAULT_SAVINGS_ROWS, mp_normalize_savings_rows)
     if "mp_monthly_rows_df" not in st.session_state:
         st.session_state.mp_monthly_rows_df = mp_load_monthly_rows()
 
@@ -396,6 +415,20 @@ def mp_add_blank_income_row(state_key):
                 "Categoria": "",
                 "Descripcion": "",
                 "Ingreso": 0.0,
+            }
+        ]
+    )
+    st.session_state[state_key] = pd.concat([st.session_state[state_key], blank_row], ignore_index=True)
+
+
+def mp_add_blank_savings_row(state_key):
+    blank_row = pd.DataFrame(
+        [
+            {
+                "row_id": mp_new_id(),
+                "Categoria": "",
+                "Descripcion": "",
+                "Ahorro": 0.0,
             }
         ]
     )
@@ -611,16 +644,111 @@ def mp_income_page():
         st.rerun()
 
 
+def mp_savings_page():
+    state_key = "mp_savings_rows_df"
+    st.header("Ahorros")
+
+    action_cols = st.columns([0.7, 0.9, 0.9, 0.9, 3.6])
+    if action_cols[0].button("＋", key="savings_add", help="Agregar fila vacía"):
+        mp_add_blank_savings_row(state_key)
+        st.rerun()
+    if action_cols[1].button("Guardar", key="savings_save"):
+        mp_save_rows("savings", st.session_state[state_key], ["row_id"])
+        st.success("Datos guardados.")
+    if action_cols[2].button("Cargar", key="savings_load"):
+        st.session_state[state_key] = mp_load_rows("savings", MP_DEFAULT_SAVINGS_ROWS, mp_normalize_savings_rows)
+        st.success("Datos cargados.")
+        st.rerun()
+    if action_cols[3].button("Restaurar", key="savings_reset"):
+        st.session_state[state_key] = mp_normalize_savings_rows(MP_DEFAULT_SAVINGS_ROWS)
+        st.info("Datos iniciales restaurados.")
+        st.rerun()
+
+    filtro = st.text_input("Filtrar por categoría", key="savings_filter")
+    full_df = st.session_state[state_key].copy().reset_index(drop=True)
+    if filtro.strip():
+        q = filtro.strip().lower()
+        display_df = full_df[full_df["Categoria"].str.lower().str.contains(q, na=False)]
+    else:
+        display_df = full_df
+
+    if display_df.empty:
+        st.info("No hay ahorros para mostrar.")
+        return
+
+    head = st.columns([1.35, 2.6, 1.25, 0.7])
+    head[0].markdown("**Categoría**")
+    head[1].markdown("**Descripción**")
+    head[2].markdown("**Ahorro**")
+    head[3].markdown("**Quitar**")
+
+    updated_rows = []
+    rows_to_remove = []
+
+    for _, row in display_df.iterrows():
+        row_id = row["row_id"]
+        cols = st.columns([1.35, 2.6, 1.25, 0.7])
+
+        category_options = [""] + MP_SAVINGS_CATEGORIES
+        current_category = row["Categoria"] if row["Categoria"] in MP_SAVINGS_CATEGORIES else ""
+        category_index = category_options.index(current_category) if current_category in category_options else 0
+        categoria = cols[0].selectbox(
+            "Categoría",
+            category_options,
+            index=category_index,
+            key=f"savings_cat_{row_id}",
+            label_visibility="collapsed",
+        )
+
+        descripcion = cols[1].text_input(
+            "Descripción",
+            value=str(row.get("Descripcion", "")),
+            key=f"savings_desc_{row_id}",
+            label_visibility="collapsed",
+        )
+
+        ahorro = cols[2].number_input(
+            "Ahorro",
+            min_value=0.0,
+            value=float(row.get("Ahorro", 0.0)),
+            step=1.0,
+            key=f"savings_value_{row_id}",
+            label_visibility="collapsed",
+        )
+        remove = cols[3].checkbox("Quitar", key=f"savings_remove_{row_id}", label_visibility="collapsed")
+
+        if remove:
+            rows_to_remove.append(row_id)
+
+        updated_rows.append(
+            {
+                "row_id": row_id,
+                "Categoria": categoria,
+                "Descripcion": descripcion,
+                "Ahorro": float(ahorro),
+            }
+        )
+
+    st.session_state[state_key] = mp_merge_rows(full_df, updated_rows)
+
+    if st.button("Eliminar marcados", key="savings_delete"):
+        st.session_state[state_key] = st.session_state[state_key][~st.session_state[state_key]["row_id"].isin(rows_to_remove)].reset_index(drop=True)
+        st.success("Registros eliminados.")
+        st.rerun()
+
+
 def mp_home_page():
     fixed_df = st.session_state.mp_fixed_rows_df.copy()
     variable_df = st.session_state.mp_variable_rows_df.copy()
     income_df = st.session_state.mp_income_rows_df.copy()
+    savings_df = st.session_state.mp_savings_rows_df.copy()
 
     fixed_budget = float(fixed_df["Presupuesto"].sum()) if not fixed_df.empty else 0.0
     fixed_actual = float(fixed_df["Actual"].sum()) if not fixed_df.empty else 0.0
     variable_budget = float(variable_df["Presupuesto"].sum()) if not variable_df.empty else 0.0
     variable_actual = float(variable_df["Actual"].sum()) if not variable_df.empty else 0.0
     income_total = float(income_df["Ingreso"].sum()) if not income_df.empty else 0.0
+    savings_total = float(savings_df["Ahorro"].sum()) if not savings_df.empty else 0.0
 
     total_budget = fixed_budget + variable_budget
     total_expenses = fixed_actual + variable_actual
@@ -632,12 +760,13 @@ def mp_home_page():
     st.title("CashPilot")
     st.caption("Dashboard financiero personal")
     st.header("Dashboard")
-    c1, c2, c3, c4, c5 = st.columns(5)
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
     c1.metric("Ingresos", mp_currency(income_total))
     c2.metric("Gastos fijos", mp_currency(fixed_actual))
     c3.metric("Gastos variables", mp_currency(variable_actual))
     c4.metric("Presupuesto", mp_currency(total_budget))
-    c5.metric("Balance", mp_currency(balance))
+    c5.metric("Ahorros", mp_currency(savings_total))
+    c6.metric("Balance", mp_currency(balance))
 
     save_col, info_col = st.columns([1, 4])
     with save_col:
@@ -729,7 +858,7 @@ def mp_home_page():
 
 def mp_sidebar_page():
     st.sidebar.title("Navegación")
-    return st.sidebar.radio("Ir a", ["Home", "Gastos fijos", "Gastos variables", "Ingresos"], index=0, label_visibility="collapsed")
+    return st.sidebar.radio("Ir a", ["Home", "Gastos fijos", "Gastos variables", "Ingresos", "Ahorros"], index=0, label_visibility="collapsed")
 
 
 def main():
@@ -746,6 +875,8 @@ def main():
         mp_expense_page("Gastos variables", "mp_variable_rows_df", "variable", MP_DEFAULT_VARIABLE_ROWS)
     elif page == "Ingresos":
         mp_income_page()
+    elif page == "Ahorros":
+        mp_savings_page()
 
 
 if __name__ == "__main__":
