@@ -1,5 +1,6 @@
 import json
 import os
+import uuid
 
 import pandas as pd
 import streamlit as st
@@ -255,19 +256,418 @@ def build_actions():
             st.info("Datos iniciales restaurados.")
 
 
+MP_EXPENSE_CATEGORIES = [
+    "Vivienda",
+    "Servicios",
+    "Alimentación",
+    "Transporte",
+    "Salud",
+    "Finanzas",
+    "Educación",
+    "Cuidado",
+    "Entretenimiento",
+    "Familia",
+    "Otros",
+]
+
+MP_INCOME_CATEGORIES = ["Trabajo", "Mesada", "Negocio", "Inversiones", "Regalos", "Otros"]
+
+MP_DEFAULT_FIXED_ROWS = [
+    {"Categoria": "Alimentación", "Descripcion": "Supermercado", "Presupuesto": 213.00, "Actual": 222.00},
+    {"Categoria": "Finanzas", "Descripcion": "Tarjetas de crédito", "Presupuesto": 0.00, "Actual": 0.00},
+    {"Categoria": "Educación", "Descripcion": "Material", "Presupuesto": 1312.00, "Actual": 313.00},
+    {"Categoria": "Salud", "Descripcion": "Exámenes", "Presupuesto": 1312.00, "Actual": 22223.00},
+]
+
+MP_DEFAULT_VARIABLE_ROWS = [
+    {"Categoria": "Alimentación", "Descripcion": "Delivery", "Presupuesto": 500.00, "Actual": 0.00},
+    {"Categoria": "Entretenimiento", "Descripcion": "Salidas", "Presupuesto": 800.00, "Actual": 0.00},
+]
+
+MP_DEFAULT_INCOME_ROWS = [
+    {"Categoria": "Trabajo", "Descripcion": "Sueldo mensual", "Ingreso": 0.00},
+    {"Categoria": "Mesada", "Descripcion": "", "Ingreso": 0.00},
+]
+
+MP_DATA_FILES = {
+    "fixed": "gastos_fijos.json",
+    "variable": "gastos_variables.json",
+    "income": "ingresos.json",
+}
+
+
+def mp_new_id():
+    return uuid.uuid4().hex
+
+
+def mp_normalize_expense_rows(rows):
+    df = pd.DataFrame(rows)
+    if df.empty:
+        df = pd.DataFrame(columns=["row_id", "Categoria", "Descripcion", "Presupuesto", "Actual"])
+    if "row_id" not in df.columns:
+        df.insert(0, "row_id", [mp_new_id() for _ in range(len(df))])
+    df["Categoria"] = df.get("Categoria", pd.Series(dtype=str)).fillna("").astype(str)
+    df["Descripcion"] = df.get("Descripcion", pd.Series(dtype=str)).fillna("").astype(str)
+    df["Presupuesto"] = pd.to_numeric(df.get("Presupuesto", 0), errors="coerce").fillna(0.0)
+    df["Actual"] = pd.to_numeric(df.get("Actual", 0), errors="coerce").fillna(0.0)
+    return df[["row_id", "Categoria", "Descripcion", "Presupuesto", "Actual"]]
+
+
+def mp_normalize_income_rows(rows):
+    df = pd.DataFrame(rows)
+    if df.empty:
+        df = pd.DataFrame(columns=["row_id", "Categoria", "Descripcion", "Ingreso"])
+    if "row_id" not in df.columns:
+        df.insert(0, "row_id", [mp_new_id() for _ in range(len(df))])
+    df["Categoria"] = df.get("Categoria", pd.Series(dtype=str)).fillna("").astype(str)
+    df["Descripcion"] = df.get("Descripcion", pd.Series(dtype=str)).fillna("").astype(str)
+    df["Ingreso"] = pd.to_numeric(df.get("Ingreso", 0), errors="coerce").fillna(0.0)
+    return df[["row_id", "Categoria", "Descripcion", "Ingreso"]]
+
+
+def mp_load_rows(file_key, default_rows, normalizer):
+    file_path = MP_DATA_FILES[file_key]
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, "r", encoding="utf-8") as fh:
+                return normalizer(json.load(fh))
+        except Exception:
+            pass
+    return normalizer(default_rows)
+
+
+def mp_save_rows(file_key, df, drop_cols):
+    file_path = MP_DATA_FILES[file_key]
+    payload = df.drop(columns=drop_cols, errors="ignore").to_dict(orient="records")
+    with open(file_path, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False, indent=2)
+
+
+def mp_currency(amount):
+    return f"DOP {amount:,.2f}"
+
+
+def mp_init_state():
+    if "mp_fixed_rows_df" not in st.session_state:
+        st.session_state.mp_fixed_rows_df = mp_load_rows("fixed", MP_DEFAULT_FIXED_ROWS, mp_normalize_expense_rows)
+    if "mp_variable_rows_df" not in st.session_state:
+        st.session_state.mp_variable_rows_df = mp_load_rows("variable", MP_DEFAULT_VARIABLE_ROWS, mp_normalize_expense_rows)
+    if "mp_income_rows_df" not in st.session_state:
+        st.session_state.mp_income_rows_df = mp_load_rows("income", MP_DEFAULT_INCOME_ROWS, mp_normalize_income_rows)
+
+
+def mp_add_blank_expense_row(state_key):
+    blank_row = pd.DataFrame(
+        [
+            {
+                "row_id": mp_new_id(),
+                "Categoria": "",
+                "Descripcion": "",
+                "Presupuesto": 0.0,
+                "Actual": 0.0,
+            }
+        ]
+    )
+    st.session_state[state_key] = pd.concat([st.session_state[state_key], blank_row], ignore_index=True)
+
+
+def mp_add_blank_income_row(state_key):
+    blank_row = pd.DataFrame(
+        [
+            {
+                "row_id": mp_new_id(),
+                "Categoria": "",
+                "Descripcion": "",
+                "Ingreso": 0.0,
+            }
+        ]
+    )
+    st.session_state[state_key] = pd.concat([st.session_state[state_key], blank_row], ignore_index=True)
+
+
+def mp_merge_rows(full_df, updated_rows):
+    updated_df = pd.DataFrame(updated_rows)
+    if updated_df.empty:
+        return full_df
+    updated_df = updated_df.set_index("row_id")
+    merged = full_df.copy().set_index("row_id")
+    for row_id, values in updated_df.to_dict(orient="index").items():
+        if row_id in merged.index:
+            for col, value in values.items():
+                merged.at[row_id, col] = value
+    return merged.reset_index()
+
+
+def mp_expense_page(title, state_key, file_key, default_rows):
+    st.header(title)
+
+    action_cols = st.columns([0.7, 0.9, 0.9, 0.9, 3.6])
+    if action_cols[0].button("＋", key=f"{state_key}_add", help="Agregar fila vacía"):
+        mp_add_blank_expense_row(state_key)
+        st.rerun()
+    if action_cols[1].button("Guardar", key=f"{state_key}_save"):
+        mp_save_rows(file_key, st.session_state[state_key], ["row_id"])
+        st.success("Datos guardados.")
+    if action_cols[2].button("Cargar", key=f"{state_key}_load"):
+        st.session_state[state_key] = mp_load_rows(file_key, default_rows, mp_normalize_expense_rows)
+        st.success("Datos cargados.")
+        st.rerun()
+    if action_cols[3].button("Restaurar", key=f"{state_key}_reset"):
+        st.session_state[state_key] = mp_normalize_expense_rows(default_rows)
+        st.info("Datos iniciales restaurados.")
+        st.rerun()
+
+    filtro = st.text_input("Filtrar por categoría", key=f"{state_key}_filter")
+    full_df = st.session_state[state_key].copy().reset_index(drop=True)
+    if filtro.strip():
+        q = filtro.strip().lower()
+        display_df = full_df[full_df["Categoria"].str.lower().str.contains(q, na=False)]
+    else:
+        display_df = full_df
+
+    if display_df.empty:
+        st.info("No hay registros para mostrar.")
+        return
+
+    head = st.columns([1.35, 2.0, 2.2, 1.15, 1.15, 0.7])
+    head[0].markdown("**Categoría**")
+    head[1].markdown("**Descripción**")
+    head[2].markdown("**Descripción opcional**")
+    head[3].markdown("**Presupuesto**")
+    head[4].markdown("**Actual**")
+    head[5].markdown("**Quitar**")
+
+    updated_rows = []
+    rows_to_remove = []
+
+    for _, row in display_df.iterrows():
+        row_id = row["row_id"]
+        cols = st.columns([1.35, 2.0, 2.2, 1.15, 1.15, 0.7])
+
+        category_options = [""] + MP_EXPENSE_CATEGORIES
+        current_category = row["Categoria"] if row["Categoria"] in MP_EXPENSE_CATEGORIES else ""
+        category_index = category_options.index(current_category) if current_category in category_options else 0
+        categoria = cols[0].selectbox(
+            "Categoría",
+            category_options,
+            index=category_index,
+            key=f"{state_key}_cat_{row_id}",
+            label_visibility="collapsed",
+        )
+
+        descripcion = cols[1].text_input(
+            "Descripción",
+            value=str(row.get("Descripcion", "")),
+            key=f"{state_key}_desc_{row_id}",
+            label_visibility="collapsed",
+        )
+
+        presupuesto = cols[3].number_input(
+            "Presupuesto",
+            min_value=0.0,
+            value=float(row.get("Presupuesto", 0.0)),
+            step=1.0,
+            key=f"{state_key}_budget_{row_id}",
+            label_visibility="collapsed",
+        )
+        actual = cols[4].number_input(
+            "Actual",
+            min_value=0.0,
+            value=float(row.get("Actual", 0.0)),
+            step=1.0,
+            key=f"{state_key}_actual_{row_id}",
+            label_visibility="collapsed",
+        )
+        remove = cols[5].checkbox("Quitar", key=f"{state_key}_remove_{row_id}", label_visibility="collapsed")
+
+        if remove:
+            rows_to_remove.append(row_id)
+
+        updated_rows.append(
+            {
+                "row_id": row_id,
+                "Categoria": categoria,
+                "Descripcion": descripcion,
+                "Presupuesto": float(presupuesto),
+                "Actual": float(actual),
+            }
+        )
+
+    st.session_state[state_key] = mp_merge_rows(full_df, updated_rows)
+    if rows_to_remove:
+        st.session_state[state_key] = st.session_state[state_key][~st.session_state[state_key]["row_id"].isin(rows_to_remove)].reset_index(drop=True)
+
+    bottom_cols = st.columns([1, 1, 4])
+    if bottom_cols[0].button("Eliminar marcados", key=f"{state_key}_delete"):
+        st.session_state[state_key] = st.session_state[state_key][~st.session_state[state_key]["row_id"].isin(rows_to_remove)].reset_index(drop=True)
+        st.success("Registros eliminados.")
+        st.rerun()
+
+
+def mp_income_page():
+    state_key = "mp_income_rows_df"
+    st.header("Ingresos")
+
+    action_cols = st.columns([0.7, 0.9, 0.9, 0.9, 3.6])
+    if action_cols[0].button("＋", key="income_add", help="Agregar fila vacía"):
+        mp_add_blank_income_row(state_key)
+        st.rerun()
+    if action_cols[1].button("Guardar", key="income_save"):
+        mp_save_rows("income", st.session_state[state_key], ["row_id"])
+        st.success("Datos guardados.")
+    if action_cols[2].button("Cargar", key="income_load"):
+        st.session_state[state_key] = mp_load_rows("income", MP_DEFAULT_INCOME_ROWS, mp_normalize_income_rows)
+        st.success("Datos cargados.")
+        st.rerun()
+    if action_cols[3].button("Restaurar", key="income_reset"):
+        st.session_state[state_key] = mp_normalize_income_rows(MP_DEFAULT_INCOME_ROWS)
+        st.info("Datos iniciales restaurados.")
+        st.rerun()
+
+    filtro = st.text_input("Filtrar por categoría", key="income_filter")
+    full_df = st.session_state[state_key].copy().reset_index(drop=True)
+    if filtro.strip():
+        q = filtro.strip().lower()
+        display_df = full_df[full_df["Categoria"].str.lower().str.contains(q, na=False)]
+    else:
+        display_df = full_df
+
+    if display_df.empty:
+        st.info("No hay ingresos para mostrar.")
+        return
+
+    head = st.columns([1.35, 2.6, 1.25, 0.7])
+    head[0].markdown("**Categoría**")
+    head[1].markdown("**Descripción**")
+    head[2].markdown("**Ingreso**")
+    head[3].markdown("**Quitar**")
+
+    updated_rows = []
+    rows_to_remove = []
+
+    for _, row in display_df.iterrows():
+        row_id = row["row_id"]
+        cols = st.columns([1.35, 2.6, 1.25, 0.7])
+
+        category_options = [""] + MP_INCOME_CATEGORIES
+        current_category = row["Categoria"] if row["Categoria"] in MP_INCOME_CATEGORIES else ""
+        category_index = category_options.index(current_category) if current_category in category_options else 0
+        categoria = cols[0].selectbox(
+            "Categoría",
+            category_options,
+            index=category_index,
+            key=f"income_cat_{row_id}",
+            label_visibility="collapsed",
+        )
+
+        descripcion = cols[1].text_input(
+            "Descripción",
+            value=str(row.get("Descripcion", "")),
+            key=f"income_desc_{row_id}",
+            label_visibility="collapsed",
+        )
+
+        ingreso = cols[2].number_input(
+            "Ingreso",
+            min_value=0.0,
+            value=float(row.get("Ingreso", 0.0)),
+            step=1.0,
+            key=f"income_value_{row_id}",
+            label_visibility="collapsed",
+        )
+        remove = cols[3].checkbox("Quitar", key=f"income_remove_{row_id}", label_visibility="collapsed")
+
+        if remove:
+            rows_to_remove.append(row_id)
+
+        updated_rows.append(
+            {
+                "row_id": row_id,
+                "Categoria": categoria,
+                "Descripcion": descripcion,
+                "Ingreso": float(ingreso),
+            }
+        )
+
+    st.session_state[state_key] = mp_merge_rows(full_df, updated_rows)
+    if rows_to_remove:
+        st.session_state[state_key] = st.session_state[state_key][~st.session_state[state_key]["row_id"].isin(rows_to_remove)].reset_index(drop=True)
+
+    if st.button("Eliminar marcados", key="income_delete"):
+        st.session_state[state_key] = st.session_state[state_key][~st.session_state[state_key]["row_id"].isin(rows_to_remove)].reset_index(drop=True)
+        st.success("Registros eliminados.")
+        st.rerun()
+
+
+def mp_home_page():
+    fixed_df = st.session_state.mp_fixed_rows_df.copy()
+    variable_df = st.session_state.mp_variable_rows_df.copy()
+    income_df = st.session_state.mp_income_rows_df.copy()
+
+    fixed_budget = float(fixed_df["Presupuesto"].sum()) if not fixed_df.empty else 0.0
+    fixed_actual = float(fixed_df["Actual"].sum()) if not fixed_df.empty else 0.0
+    variable_budget = float(variable_df["Presupuesto"].sum()) if not variable_df.empty else 0.0
+    variable_actual = float(variable_df["Actual"].sum()) if not variable_df.empty else 0.0
+    income_total = float(income_df["Ingreso"].sum()) if not income_df.empty else 0.0
+
+    total_budget = fixed_budget + variable_budget
+    total_expenses = fixed_actual + variable_actual
+    balance = income_total - total_expenses
+
+    st.header("Dashboard")
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("Ingresos", mp_currency(income_total))
+    c2.metric("Gastos fijos", mp_currency(fixed_actual))
+    c3.metric("Gastos variables", mp_currency(variable_actual))
+    c4.metric("Presupuesto", mp_currency(total_budget))
+    c5.metric("Balance", mp_currency(balance))
+
+    st.divider()
+    left, right = st.columns(2)
+
+    with left:
+        st.subheader("Resumen de gastos por categoría")
+        exp_summary = pd.concat(
+            [
+                fixed_df[["Categoria", "Presupuesto", "Actual"]],
+                variable_df[["Categoria", "Presupuesto", "Actual"]],
+            ],
+            ignore_index=True,
+        ) if (not fixed_df.empty or not variable_df.empty) else pd.DataFrame(columns=["Categoria", "Presupuesto", "Actual"])
+        if not exp_summary.empty:
+            exp_summary = exp_summary.groupby("Categoria", as_index=True)[["Presupuesto", "Actual"]].sum()
+            st.bar_chart(exp_summary)
+        else:
+            st.info("No hay gastos para mostrar.")
+
+    with right:
+        st.subheader("Ingresos por categoría")
+        if not income_df.empty:
+            income_summary = income_df.groupby("Categoria", as_index=True)[["Ingreso"]].sum()
+            st.bar_chart(income_summary)
+        else:
+            st.info("No hay ingresos para mostrar.")
+
+
+def mp_sidebar_page():
+    st.sidebar.title("Navegación")
+    return st.sidebar.radio("Ir a", ["Home", "Gastos fijos", "Gastos variables", "Ingresos"], index=0, label_visibility="collapsed")
+
+
 def main():
     st.set_page_config(page_title="Control de gastos", layout="wide")
-    init_state()
+    mp_init_state()
 
-    st.title("Control de gastos")
-    st.caption("Organiza categorías, presupuesto y gasto real en una sola pantalla.")
+    page = mp_sidebar_page()
 
-    build_summary_panel()
-    st.divider()
-    build_editor_panel()
-
-    st.divider()
-    build_actions()
+    if page == "Home":
+        mp_home_page()
+    elif page == "Gastos fijos":
+        mp_expense_page("Gastos fijos", "mp_fixed_rows_df", "fixed", MP_DEFAULT_FIXED_ROWS)
+    elif page == "Gastos variables":
+        mp_expense_page("Gastos variables", "mp_variable_rows_df", "variable", MP_DEFAULT_VARIABLE_ROWS)
+    elif page == "Ingresos":
+        mp_income_page()
 
 
 if __name__ == "__main__":
