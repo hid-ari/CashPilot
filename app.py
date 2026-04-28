@@ -91,13 +91,6 @@ def init_state():
         st.session_state.selected_category = "Alimentación"
 
 
-def build_catalog_panel():
-    st.subheader("Catálogo de categorías")
-    category = st.selectbox("Categoría", list(CATEGORIES.keys()), key="selected_category")
-    st.write(f"Elementos de {category}")
-    st.markdown("\n".join(f"- {item}" for item in CATEGORIES.get(category, [])))
-
-
 def build_add_form():
     st.subheader("Nuevo gasto fijo")
     with st.form("add_form", clear_on_submit=True):
@@ -272,14 +265,11 @@ def main():
     st.title("Control de gastos")
     st.caption("Organiza categorías, presupuesto y gasto real en una sola pantalla.")
 
-    left, right = st.columns([1, 2])
-    with left:
-        build_catalog_panel()
-        build_add_form()
-    with right:
-        build_summary_panel()
-        st.divider()
-        build_editor_panel()
+    build_add_form()
+    st.divider()
+    build_summary_panel()
+    st.divider()
+    build_editor_panel()
 
     st.divider()
     build_actions()
