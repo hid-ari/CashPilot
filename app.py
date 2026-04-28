@@ -792,13 +792,18 @@ def mp_home_page():
     st.title("CashPilot")
     st.caption("Dashboard financiero personal")
     st.header("Dashboard")
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    c1.metric("Ingresos", mp_currency(income_total))
-    c2.metric("Gastos fijos", mp_currency(fixed_actual))
-    c3.metric("Gastos variables", mp_currency(variable_actual))
-    c4.metric("Presupuesto", mp_currency(total_budget))
-    c5.metric("Ahorros", mp_currency(savings_total))
-    c6.metric("Balance", mp_currency(balance))
+    dashboard_metrics = [
+        ("Ingresos", mp_currency(income_total)),
+        ("Gastos fijos", mp_currency(fixed_actual)),
+        ("Gastos variables", mp_currency(variable_actual)),
+        ("Presupuesto", mp_currency(total_budget)),
+        ("Ahorros", mp_currency(savings_total)),
+        ("Balance", mp_currency(balance)),
+    ]
+    for start in range(0, len(dashboard_metrics), 3):
+        metric_cols = st.columns(3)
+        for col, (label, value) in zip(metric_cols, dashboard_metrics[start:start + 3]):
+            col.metric(label, value)
 
     save_col, info_col = st.columns([1, 4])
     with save_col:
