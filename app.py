@@ -429,20 +429,19 @@ def mp_expense_page(title, state_key, file_key, default_rows):
         st.info("No hay registros para mostrar.")
         return
 
-    head = st.columns([1.35, 2.0, 2.2, 1.15, 1.15, 0.7])
+    head = st.columns([1.35, 2.2, 1.15, 1.15, 0.7])
     head[0].markdown("**Categoría**")
-    head[1].markdown("**Descripción**")
-    head[2].markdown("**Descripción opcional**")
-    head[3].markdown("**Presupuesto**")
-    head[4].markdown("**Actual**")
-    head[5].markdown("**Quitar**")
+    head[1].markdown("**Descripción opcional**")
+    head[2].markdown("**Presupuesto**")
+    head[3].markdown("**Actual**")
+    head[4].markdown("**Quitar**")
 
     updated_rows = []
     rows_to_remove = []
 
     for _, row in display_df.iterrows():
         row_id = row["row_id"]
-        cols = st.columns([1.35, 2.0, 2.2, 1.15, 1.15, 0.7])
+        cols = st.columns([1.35, 2.2, 1.15, 1.15, 0.7])
 
         category_options = [""] + MP_EXPENSE_CATEGORIES
         current_category = row["Categoria"] if row["Categoria"] in MP_EXPENSE_CATEGORIES else ""
@@ -462,7 +461,7 @@ def mp_expense_page(title, state_key, file_key, default_rows):
             label_visibility="collapsed",
         )
 
-        presupuesto = cols[3].number_input(
+        presupuesto = cols[2].number_input(
             "Presupuesto",
             min_value=0.0,
             value=float(row.get("Presupuesto", 0.0)),
@@ -470,7 +469,7 @@ def mp_expense_page(title, state_key, file_key, default_rows):
             key=f"{state_key}_budget_{row_id}",
             label_visibility="collapsed",
         )
-        actual = cols[4].number_input(
+        actual = cols[3].number_input(
             "Actual",
             min_value=0.0,
             value=float(row.get("Actual", 0.0)),
@@ -478,7 +477,7 @@ def mp_expense_page(title, state_key, file_key, default_rows):
             key=f"{state_key}_actual_{row_id}",
             label_visibility="collapsed",
         )
-        remove = cols[5].checkbox("Quitar", key=f"{state_key}_remove_{row_id}", label_visibility="collapsed")
+        remove = cols[4].checkbox("Quitar", key=f"{state_key}_remove_{row_id}", label_visibility="collapsed")
 
         if remove:
             rows_to_remove.append(row_id)
