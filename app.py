@@ -3,8 +3,8 @@ import os
 import uuid
 
 import pandas as pd
-import matplotlib.pyplot as plt
 import streamlit as st
+import plotly.express as px
 
 
 CATEGORIES = {
@@ -623,53 +623,58 @@ def mp_home_page():
     c5.metric("Balance", mp_currency(balance))
 
     st.divider()
-    st.subheader("Distribución general")
-
-    expense_summary = pd.concat(
+    st.subheader("Gráfica resumen")
+    # Prepare data for pies
+    expenses_all = pd.concat(
         [
-            fixed_df[["Categoria", "Actual"]],
-            variable_df[["Categoria", "Actual"]],
+            fixed_df[["Categoria", "Actual"]].rename(columns={"Actual": "Valor"}),
+            variable_df[["Categoria", "Actual"]].rename(columns={"Actual": "Valor"}),
         ],
         ignore_index=True,
-    ) if (not fixed_df.empty or not variable_df.empty) else pd.DataFrame(columns=["Categoria", "Actual"])
-    budget_summary = pd.concat(
+    ) if (not fixed_df.empty or not variable_df.empty) else pd.DataFrame(columns=["Categoria", "Valor"])
+
+    expenses_by_cat = expenses_all.groupby("Categoria", as_index=False)["Valor"].sum() if not expenses_all.empty else pd.DataFrame(columns=["Categoria", "Valor"]) 
+
+    income_by_cat = income_df.groupby("Categoria", as_index=False)[["Ingreso"]].sum() if not income_df.empty else pd.DataFrame(columns=["Categoria", "Ingreso"]) 
+
+    budget_all = pd.concat(
         [
-            fixed_df[["Categoria", "Presupuesto"]],
-            variable_df[["Categoria", "Presupuesto"]],
+            fixed_df[["Categoria", "Presupuesto"]].rename(columns={"Presupuesto": "Valor"}),
+            variable_df[["Categoria", "Presupuesto"]].rename(columns={"Presupuesto": "Valor"}),
         ],
         ignore_index=True,
-    ) if (not fixed_df.empty or not variable_df.empty) else pd.DataFrame(columns=["Categoria", "Presupuesto"])
+    ) if (not fixed_df.empty or not variable_df.empty) else pd.DataFrame(columns=["Categoria", "Valor"])
 
-    expense_summary = expense_summary.groupby("Categoria", as_index=False)["Actual"].sum() if not expense_summary.empty else expense_summary
-    budget_summary = budget_summary.groupby("Categoria", as_index=False)["Presupuesto"].sum() if not budget_summary.empty else budget_summary
-    income_summary = income_df.groupby("Categoria", as_index=False)["Ingreso"].sum() if not income_df.empty else pd.DataFrame(columns=["Categoria", "Ingreso"])
+    budget_by_cat = budget_all.groupby("Categoria", as_index=False)["Valor"].sum() if not budget_all.empty else pd.DataFrame(columns=["Categoria", "Valor"]) 
 
-    fig, axes = plt.subplots(1, 3, figsize=(16, 5))
-    datasets = [
-        (axes[0], expense_summary, "Total de gastos", "Actual", "#ef4444"),
-        (axes[1], income_summary, "Total de ingresos", "Ingreso", "#22c55e"),
-        (axes[2], budget_summary, "Total de presupuesto", "Presupuesto", "#3b82f6"),
-    ]
+    col1, col2, col3 = st.columns(3)
 
-    for ax, data, title, value_col, color in datasets:
-        if not data.empty and data[value_col].sum() > 0:
-            ax.pie(
-                data[value_col],
-                labels=data["Categoria"],
-                autopct="%1.1f%%",
-                startangle=90,
-                colors=plt.cm.Set3.colors,
-                textprops={"fontsize": 8},
-            )
-            total = data[value_col].sum()
+    # Gastos pie (by actual)
+    with col1:
+        st.markdown("**Gastos (Actual)**")
+        if not expenses_by_cat.empty and expenses_by_cat["Valor"].sum() > 0:
+            fig1 = px.pie(expenses_by_cat, names="Categoria", values="Valor", title="Gastos por categoría (Actual)")
+            st.plotly_chart(fig1, use_container_width=True)
         else:
-            ax.pie([1], labels=["Sin datos"], colors=["#d1d5db"], startangle=90)
-            total = 0
-        ax.set_title(f"{title}\n{mp_currency(total)}", fontsize=12)
-        ax.axis("equal")
+            st.info("No hay gastos registrados.")
 
-    plt.tight_layout()
-    st.pyplot(fig, use_container_width=True)
+    # Ingresos pie
+    with col2:
+        st.markdown("**Ingresos**")
+        if not income_by_cat.empty and income_by_cat["Ingreso"].sum() > 0:
+            fig2 = px.pie(income_by_cat, names="Categoria", values="Ingreso", title="Ingresos por categoría")
+            st.plotly_chart(fig2, use_container_width=True)
+        else:
+            st.info("No hay ingresos registrados.")
+
+    # Presupuesto pie
+    with col3:
+        st.markdown("**Presupuesto**")
+        if not budget_by_cat.empty and budget_by_cat["Valor"].sum() > 0:
+            fig3 = px.pie(budget_by_cat, names="Categoria", values="Valor", title="Presupuesto por categoría")
+            st.plotly_chart(fig3, use_container_width=True)
+        else:
+            st.info("No hay presupuesto registrado.")
 
 
 def mp_sidebar_page():
