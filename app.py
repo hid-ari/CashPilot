@@ -94,27 +94,31 @@ def format_currency(amount):
     return f"{currency} {amount:,.2f}"
 
 
-def apply_nothing_font():
+def apply_space_mono_font():
     st.markdown(
         """
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Nothing+You+Could+Do&family=Inter:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
 
-        html, body, [class*="css"], .stApp {
-            font-family: 'Inter', sans-serif;
+        html, body, .stApp,
+        .stApp *,
+        .stMarkdown, .stMarkdown *,
+        .stText, .stText *,
+        .stCaption, .stCaption *,
+        .stMetric, .stMetric *,
+        .stButton, .stButton *,
+        .stSelectbox, .stSelectbox *,
+        .stTextInput, .stTextInput *,
+        .stNumberInput, .stNumberInput *,
+        .stCheckbox, .stCheckbox *,
+        .stRadio, .stRadio *,
+        ul, ol, li, p, span, div, label, input, textarea, button {
+            font-family: 'Space Mono', monospace !important;
         }
 
-        h1, h2, h3, h4, h5, h6,
-        .stMetricLabel,
-        .stMetricValue,
-        .stButton > button,
-        .stSelectbox label,
-        .stTextInput label,
-        .stNumberInput label,
-        .stCheckbox label,
-        .stRadio label {
-            font-family: 'Nothing You Could Do', cursive !important;
-            letter-spacing: 0.02em;
+        .stMarkdown ul,
+        .stMarkdown ol {
+            padding-left: 1.4rem;
         }
 
         .stMetricValue {
@@ -972,7 +976,7 @@ def mp_sidebar_page():
 
 def main():
     st.set_page_config(page_title="CashPilot", layout="wide")
-    apply_nothing_font()
+    apply_space_mono_font()
     mp_init_state()
     init_profile_state()
 
