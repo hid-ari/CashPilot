@@ -132,29 +132,98 @@ def build_add_form():
 
 def build_editor_panel():
     st.subheader("Gastos fijos")
-    df = st.session_state.rows_df.copy()
+    df = st.session_state.rows_df.copy().reset_index(drop=True)
 
     filtro = st.text_input("Filtrar por categoría o gasto", value="")
     if filtro.strip():
         q = filtro.strip().lower()
         df = df[df["Categoria"].str.lower().str.contains(q, na=False) | df["Gasto"].str.lower().str.contains(q, na=False)]
 
-    edited = st.data_editor(
-        df,
-        use_container_width=True,
-        num_rows="dynamic",
-        column_config={
-            "Categoria": st.column_config.SelectboxColumn("Categoría", options=list(CATEGORIES.keys())),
-            "Gasto": st.column_config.TextColumn("Gasto"),
-            "Presupuesto": st.column_config.NumberColumn("Presupuesto", min_value=0.0, format="DOP %.2f"),
-            "Actual": st.column_config.NumberColumn("Actual", min_value=0.0, format="DOP %.2f"),
-        },
-        key="main_editor",
-    )
+    if df.empty:
+        st.info("No hay registros para mostrar.")
+        return
 
-    if st.button("Aplicar cambios al editor"):
-        st.session_state.rows_df = rows_to_frame(edited.to_dict(orient="records"))
+    header_cols = st.columns([1.2, 1.8, 1.2, 1.2, 0.6])
+    header_cols[0].markdown("**Categoría**")
+    header_cols[1].markdown("**Gasto**")
+    header_cols[2].markdown("**Presupuesto**")
+    header_cols[3].markdown("**Actual**")
+    header_cols[4].markdown("**Quitar**")
+
+    updated_rows = []
+    rows_to_remove = []
+
+    for idx, row in df.iterrows():
+        cols = st.columns([1.2, 1.8, 1.2, 1.2, 0.6])
+
+        current_category = row["Categoria"] if row["Categoria"] in CATEGORIES else "Otros"
+        category_options = list(CATEGORIES.keys())
+        category_index = category_options.index(current_category)
+        categoria = cols[0].selectbox(
+            "Categoría",
+            category_options,
+            index=category_index,
+            key=f"edit_categoria_{idx}",
+            label_visibility="collapsed",
+        )
+
+        gasto_options = CATEGORIES.get(categoria, [])
+        current_gasto = row["Gasto"] if row["Gasto"] in gasto_options else (gasto_options[0] if gasto_options else "")
+        gasto_index = gasto_options.index(current_gasto) if current_gasto in gasto_options else 0
+        gasto = cols[1].selectbox(
+            "Gasto",
+            gasto_options,
+            index=gasto_index,
+            key=f"edit_gasto_{idx}",
+            label_visibility="collapsed",
+        )
+
+        presupuesto = cols[2].number_input(
+            "Presupuesto",
+            min_value=0.0,
+            value=float(row["Presupuesto"]),
+            step=1.0,
+            key=f"edit_presupuesto_{idx}",
+            label_visibility="collapsed",
+        )
+        actual = cols[3].number_input(
+            "Actual",
+            min_value=0.0,
+            value=float(row["Actual"]),
+            step=1.0,
+            key=f"edit_actual_{idx}",
+            label_visibility="collapsed",
+        )
+
+        remove = cols[4].checkbox("Quitar", key=f"edit_remove_{idx}", label_visibility="collapsed")
+        if remove:
+            rows_to_remove.append(idx)
+
+        updated_rows.append(
+            {
+                "Categoria": categoria,
+                "Gasto": gasto,
+                "Presupuesto": float(presupuesto),
+                "Actual": float(actual),
+            }
+        )
+
+    actions = st.columns([1, 1, 4])
+    if actions[0].button("Aplicar cambios"):
+        result = pd.DataFrame(updated_rows)
+        if rows_to_remove:
+            result = result.drop(index=rows_to_remove).reset_index(drop=True)
+        st.session_state.rows_df = rows_to_frame(result.to_dict(orient="records"))
         st.success("Cambios aplicados.")
+        st.rerun()
+
+    if actions[1].button("Eliminar marcados"):
+        result = pd.DataFrame(updated_rows)
+        if rows_to_remove:
+            result = result.drop(index=rows_to_remove).reset_index(drop=True)
+        st.session_state.rows_df = rows_to_frame(result.to_dict(orient="records"))
+        st.success("Registros eliminados.")
+        st.rerun()
 
 
 def build_summary_panel():
