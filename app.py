@@ -450,6 +450,23 @@ def save_settings(settings):
         json.dump(settings, fh, ensure_ascii=False, indent=2)
 
 
+def delete_app_data():
+    data_files = list(MP_DATA_FILES.values()) + [DATA_FILE, SETTINGS_FILE]
+    for file_path in data_files:
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception:
+                pass
+
+    st.session_state.profile = load_settings()
+    st.session_state.mp_fixed_rows_df = mp_load_rows("fixed", MP_DEFAULT_FIXED_ROWS, mp_normalize_expense_rows)
+    st.session_state.mp_variable_rows_df = mp_load_rows("variable", MP_DEFAULT_VARIABLE_ROWS, mp_normalize_expense_rows)
+    st.session_state.mp_income_rows_df = mp_load_rows("income", MP_DEFAULT_INCOME_ROWS, mp_normalize_income_rows)
+    st.session_state.mp_savings_rows_df = mp_load_rows("savings", MP_DEFAULT_SAVINGS_ROWS, mp_normalize_savings_rows)
+    st.session_state.mp_monthly_rows_df = mp_load_monthly_rows()
+
+
 def init_profile_state():
     if "profile" not in st.session_state:
         st.session_state.profile = load_settings()
@@ -467,6 +484,16 @@ def build_profile_panel():
         save_settings(st.session_state.profile)
         st.success("Perfil guardado.")
         st.experimental_rerun()
+
+    st.divider()
+    st.subheader("Eliminar datos")
+    st.warning("Esta acción borra los datos guardados del dashboard y no se puede deshacer.")
+    confirmation = st.text_input("Escribe borrar para confirmar", key="delete_data_confirmation")
+    delete_button = st.button("Eliminar datos", type="primary", disabled=confirmation.strip().lower() != "borrar")
+    if delete_button:
+        delete_app_data()
+        st.success("Datos eliminados.")
+        st.rerun()
 
 
 def mp_init_state():
