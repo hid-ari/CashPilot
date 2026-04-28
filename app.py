@@ -758,9 +758,21 @@ def mp_home_page():
     save_col, info_col = st.columns([1, 4])
     with save_col:
         if st.button("Guardar mes", key="save_month_button"):
-            # Load the complete history from file to ensure we don't lose previous records
-            monthly_df = mp_load_monthly_rows()
-            record = {
+            # ALWAYS load fresh from file to preserve all history
+            file_path = MP_DATA_FILES["monthly"]
+            existing_monthly = []
+            if os.path.exists(file_path):
+                try:
+                    with open(file_path, "r", encoding="utf-8") as fh:
+                        existing_monthly = json.load(fh)
+                except Exception:
+                    existing_monthly = []
+            
+            # Remove current month if it exists
+            existing_monthly = [row for row in existing_monthly if row.get("Mes") != current_month]
+            
+            # Add new record
+            new_record = {
                 "Mes": current_month,
                 "Ingresos": income_total,
                 "Gastos fijos": fixed_actual,
@@ -770,14 +782,14 @@ def mp_home_page():
                 "Balance": balance,
                 "Guardado": current_saved_at,
             }
-            # Remove existing record for current month if it exists
-            if not monthly_df.empty and "Mes" in monthly_df.columns:
-                monthly_df = monthly_df[monthly_df["Mes"].astype(str) != current_month]
-            # Add new record
-            monthly_df = pd.concat([monthly_df, pd.DataFrame([record])], ignore_index=True)
-            monthly_df = monthly_df.reindex(columns=MP_MONTHLY_COLUMNS)
-            st.session_state.mp_monthly_rows_df = monthly_df
-            mp_save_monthly_rows(monthly_df)
+            existing_monthly.append(new_record)
+            
+            # Save everything to file
+            with open(file_path, "w", encoding="utf-8") as fh:
+                json.dump(existing_monthly, fh, ensure_ascii=False, indent=2)
+            
+            # Reload session state from file
+            st.session_state.mp_monthly_rows_df = mp_load_monthly_rows()
             st.success("Mes guardado en el historial.")
             st.rerun()
     with info_col:
@@ -850,7 +862,8 @@ def mp_home_page():
 
     st.divider()
     st.subheader("Resumen mensual guardado")
-    monthly_df = st.session_state.mp_monthly_rows_df.copy()
+    # ALWAYS load fresh from file
+    monthly_df = mp_load_monthly_rows()
     if monthly_df.empty:
         st.info("Todavía no has guardado ningún mes.")
     else:
