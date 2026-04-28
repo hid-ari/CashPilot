@@ -494,8 +494,6 @@ def mp_expense_page(title, state_key, file_key, default_rows):
         )
 
     st.session_state[state_key] = mp_merge_rows(full_df, updated_rows)
-    if rows_to_remove:
-        st.session_state[state_key] = st.session_state[state_key][~st.session_state[state_key]["row_id"].isin(rows_to_remove)].reset_index(drop=True)
 
     bottom_cols = st.columns([1, 1, 4])
     if bottom_cols[0].button("Eliminar marcados", key=f"{state_key}_delete"):
@@ -590,8 +588,6 @@ def mp_income_page():
         )
 
     st.session_state[state_key] = mp_merge_rows(full_df, updated_rows)
-    if rows_to_remove:
-        st.session_state[state_key] = st.session_state[state_key][~st.session_state[state_key]["row_id"].isin(rows_to_remove)].reset_index(drop=True)
 
     if st.button("Eliminar marcados", key="income_delete"):
         st.session_state[state_key] = st.session_state[state_key][~st.session_state[state_key]["row_id"].isin(rows_to_remove)].reset_index(drop=True)
