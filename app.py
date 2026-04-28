@@ -100,19 +100,23 @@ def apply_space_mono_font():
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
 
-        html, body, .stApp,
-        .stApp *,
-        .stMarkdown, .stMarkdown *,
-        .stText, .stText *,
-        .stCaption, .stCaption *,
-        .stMetric, .stMetric *,
-        .stButton, .stButton *,
-        .stSelectbox, .stSelectbox *,
-        .stTextInput, .stTextInput *,
-        .stNumberInput, .stNumberInput *,
-        .stCheckbox, .stCheckbox *,
-        .stRadio, .stRadio *,
-        ul, ol, li, p, span, div, label, input, textarea, button {
+        html, body, .stApp {
+            font-family: 'Space Mono', monospace !important;
+        }
+
+        .stMarkdown p,
+        .stMarkdown h1,
+        .stMarkdown h2,
+        .stMarkdown h3,
+        .stMarkdown h4,
+        .stMarkdown h5,
+        .stMarkdown h6,
+        .stMarkdown ul,
+        .stMarkdown ol,
+        .stMarkdown li,
+        .stText,
+        .stCaption,
+        .stButton > button {
             font-family: 'Space Mono', monospace !important;
         }
 
@@ -124,6 +128,7 @@ def apply_space_mono_font():
         .stMetricValue {
             font-size: 1.85rem;
             line-height: 1.1;
+            font-family: 'Space Mono', monospace !important;
         }
         </style>
         """,
