@@ -44,24 +44,25 @@ CATEGORIES = {
 }
 
 DEFAULT_ROWS = [
-    {"Categoria": "Alimentación", "Gasto": "Supermercado", "Presupuesto": 213.00, "Actual": 222.00},
-    {"Categoria": "Finanzas", "Gasto": "Tarjetas de crédito", "Presupuesto": 0.00, "Actual": 0.00},
-    {"Categoria": "Educación", "Gasto": "Material", "Presupuesto": 1312.00, "Actual": 313.00},
-    {"Categoria": "Salud", "Gasto": "Exámenes", "Presupuesto": 1312.00, "Actual": 22223.00},
+    {"Categoria": "Alimentación", "Gasto": "Supermercado", "Descripcion": "", "Presupuesto": 213.00, "Actual": 222.00},
+    {"Categoria": "Finanzas", "Gasto": "Tarjetas de crédito", "Descripcion": "", "Presupuesto": 0.00, "Actual": 0.00},
+    {"Categoria": "Educación", "Gasto": "Material", "Descripcion": "", "Presupuesto": 1312.00, "Actual": 313.00},
+    {"Categoria": "Salud", "Gasto": "Exámenes", "Descripcion": "", "Presupuesto": 1312.00, "Actual": 22223.00},
 ]
 
 DATA_FILE = "gastos.json"
 
 
 def rows_to_frame(rows):
-    frame = pd.DataFrame(rows, columns=["Categoria", "Gasto", "Presupuesto", "Actual"])
+    frame = pd.DataFrame(rows, columns=["Categoria", "Gasto", "Descripcion", "Presupuesto", "Actual"])
     if frame.empty:
-        frame = pd.DataFrame(columns=["Categoria", "Gasto", "Presupuesto", "Actual"])
+        frame = pd.DataFrame(columns=["Categoria", "Gasto", "Descripcion", "Presupuesto", "Actual"])
     frame["Categoria"] = frame.get("Categoria", pd.Series(dtype=str)).fillna("").astype(str)
     frame["Gasto"] = frame.get("Gasto", pd.Series(dtype=str)).fillna("").astype(str)
+    frame["Descripcion"] = frame.get("Descripcion", pd.Series(dtype=str)).fillna("").astype(str)
     frame["Presupuesto"] = pd.to_numeric(frame.get("Presupuesto", 0), errors="coerce").fillna(0.0)
     frame["Actual"] = pd.to_numeric(frame.get("Actual", 0), errors="coerce").fillna(0.0)
-    return frame[["Categoria", "Gasto", "Presupuesto", "Actual"]]
+    return frame[["Categoria", "Gasto", "Descripcion", "Presupuesto", "Actual"]]
 
 
 def load_rows():
@@ -95,6 +96,7 @@ def add_blank_row():
             {
                 "Categoria": "",
                 "Gasto": "",
+                "Descripcion": "",
                 "Presupuesto": 0.0,
                 "Actual": 0.0,
             }
@@ -112,27 +114,28 @@ def build_editor_panel():
 
     df = st.session_state.rows_df.copy().reset_index(drop=True)
 
-    filtro = st.text_input("Filtrar por categoría o gasto", value="")
+    filtro = st.text_input("Filtrar por categoría", value="")
     if filtro.strip():
         q = filtro.strip().lower()
-        df = df[df["Categoria"].str.lower().str.contains(q, na=False) | df["Gasto"].str.lower().str.contains(q, na=False)]
+        df = df[df["Categoria"].str.lower().str.contains(q, na=False)]
 
     if df.empty:
         st.info("No hay registros para mostrar.")
         return
 
-    header_cols = st.columns([1.2, 1.8, 1.2, 1.2, 0.6])
+    header_cols = st.columns([1.1, 1.7, 2.0, 1.1, 1.1, 0.6])
     header_cols[0].markdown("**Categoría**")
     header_cols[1].markdown("**Gasto**")
-    header_cols[2].markdown("**Presupuesto**")
-    header_cols[3].markdown("**Actual**")
-    header_cols[4].markdown("**Quitar**")
+    header_cols[2].markdown("**Descripción opcional**")
+    header_cols[3].markdown("**Presupuesto**")
+    header_cols[4].markdown("**Actual**")
+    header_cols[5].markdown("**Quitar**")
 
     updated_rows = []
     rows_to_remove = []
 
     for idx, row in df.iterrows():
-        cols = st.columns([1.2, 1.8, 1.2, 1.2, 0.6])
+        cols = st.columns([1.1, 1.7, 2.0, 1.1, 1.1, 0.6])
 
         current_category = row["Categoria"] if row["Categoria"] in CATEGORIES else ""
         category_options = list(CATEGORIES.keys())
@@ -157,7 +160,14 @@ def build_editor_panel():
             label_visibility="collapsed",
         )
 
-        presupuesto = cols[2].number_input(
+        descripcion = cols[2].text_input(
+            "Descripción opcional",
+            value=str(row.get("Descripcion", "")),
+            key=f"edit_descripcion_{idx}",
+            label_visibility="collapsed",
+        )
+
+        presupuesto = cols[3].number_input(
             "Presupuesto",
             min_value=0.0,
             value=float(row["Presupuesto"]),
@@ -165,7 +175,7 @@ def build_editor_panel():
             key=f"edit_presupuesto_{idx}",
             label_visibility="collapsed",
         )
-        actual = cols[3].number_input(
+        actual = cols[4].number_input(
             "Actual",
             min_value=0.0,
             value=float(row["Actual"]),
@@ -174,7 +184,7 @@ def build_editor_panel():
             label_visibility="collapsed",
         )
 
-        remove = cols[4].checkbox("Quitar", key=f"edit_remove_{idx}", label_visibility="collapsed")
+        remove = cols[5].checkbox("Quitar", key=f"edit_remove_{idx}", label_visibility="collapsed")
         if remove:
             rows_to_remove.append(idx)
 
@@ -182,6 +192,7 @@ def build_editor_panel():
             {
                 "Categoria": categoria,
                 "Gasto": gasto,
+                "Descripcion": descripcion,
                 "Presupuesto": float(presupuesto),
                 "Actual": float(actual),
             }
