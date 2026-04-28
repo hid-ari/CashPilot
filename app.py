@@ -278,6 +278,8 @@ MP_DATA_FILES = {
     "monthly": os.path.join(BASE_DIR, "resumen_mensual.json"),
 }
 
+MP_MONTHLY_COLUMNS = ["Mes", "Ingresos", "Gastos fijos", "Gastos variables", "Ahorros", "Presupuesto", "Balance", "Guardado"]
+
 
 def mp_new_id():
     return uuid.uuid4().hex
@@ -338,6 +340,17 @@ def mp_save_rows(file_key, df, drop_cols):
         json.dump(payload, fh, ensure_ascii=False, indent=2)
 
 
+def mp_csv_download_button(df, file_name, label="Guardar CSV", drop_cols=None):
+    export_df = df.drop(columns=drop_cols or [], errors="ignore").copy()
+    csv_data = export_df.to_csv(index=False).encode("utf-8-sig")
+    st.download_button(
+        label,
+        data=csv_data,
+        file_name=file_name,
+        mime="text/csv",
+    )
+
+
 def mp_load_monthly_rows():
     file_path = MP_DATA_FILES["monthly"]
     if os.path.exists(file_path):
@@ -346,18 +359,26 @@ def mp_load_monthly_rows():
                 data = json.load(fh)
             df = pd.DataFrame(data)
             if df.empty:
-                return pd.DataFrame(columns=["Mes", "Ingresos", "Gastos fijos", "Gastos variables", "Ahorros", "Presupuesto", "Balance", "Guardado"])
+                return pd.DataFrame(columns=MP_MONTHLY_COLUMNS)
             if "Ahorros" not in df.columns:
                 df["Ahorros"] = 0.0
-            return df
+            for col in MP_MONTHLY_COLUMNS:
+                if col not in df.columns:
+                    df[col] = "" if col in ["Mes", "Guardado"] else 0.0
+            return df[MP_MONTHLY_COLUMNS]
         except Exception:
             pass
-    return pd.DataFrame(columns=["Mes", "Ingresos", "Gastos fijos", "Gastos variables", "Ahorros", "Presupuesto", "Balance", "Guardado"])
+    return pd.DataFrame(columns=MP_MONTHLY_COLUMNS)
 
 
 def mp_save_monthly_rows(df):
     file_path = MP_DATA_FILES["monthly"]
-    payload = df.to_dict(orient="records")
+    ordered_df = df.copy()
+    for col in MP_MONTHLY_COLUMNS:
+        if col not in ordered_df.columns:
+            ordered_df[col] = "" if col in ["Mes", "Guardado"] else 0.0
+    ordered_df = ordered_df[MP_MONTHLY_COLUMNS]
+    payload = ordered_df.to_dict(orient="records")
     with open(file_path, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
 
@@ -438,10 +459,12 @@ def mp_merge_rows(full_df, updated_rows):
 def mp_expense_page(title, state_key, file_key, default_rows):
     st.header(title)
 
-    action_cols = st.columns([0.7, 3.6])
+    action_cols = st.columns([0.7, 1.2, 3.0])
     if action_cols[0].button("＋", key=f"{state_key}_add", help="Agregar fila vacía"):
         mp_add_blank_expense_row(state_key)
         st.rerun()
+    with action_cols[1]:
+        mp_csv_download_button(st.session_state[state_key], f"{state_key}.csv", "Guardar CSV", ["row_id"])
 
     filtro = st.text_input("Filtrar por categoría", key=f"{state_key}_filter")
     full_df = st.session_state[state_key].copy().reset_index(drop=True)
@@ -533,10 +556,12 @@ def mp_income_page():
     state_key = "mp_income_rows_df"
     st.header("Ingresos")
 
-    action_cols = st.columns([0.7, 3.6])
+    action_cols = st.columns([0.7, 1.2, 3.0])
     if action_cols[0].button("＋", key="income_add", help="Agregar fila vacía"):
         mp_add_blank_income_row(state_key)
         st.rerun()
+    with action_cols[1]:
+        mp_csv_download_button(st.session_state[state_key], "ingresos.csv", "Guardar CSV", ["row_id"])
 
     filtro = st.text_input("Filtrar por categoría", key="income_filter")
     full_df = st.session_state[state_key].copy().reset_index(drop=True)
@@ -617,10 +642,12 @@ def mp_savings_page():
     state_key = "mp_savings_rows_df"
     st.header("Ahorros")
 
-    action_cols = st.columns([0.7, 3.6])
+    action_cols = st.columns([0.7, 1.2, 3.0])
     if action_cols[0].button("＋", key="savings_add", help="Agregar fila vacía"):
         mp_add_blank_savings_row(state_key)
         st.rerun()
+    with action_cols[1]:
+        mp_csv_download_button(st.session_state[state_key], "ahorros.csv", "Guardar CSV", ["row_id"])
 
     filtro = st.text_input("Filtrar por categoría", key="savings_filter")
     full_df = st.session_state[state_key].copy().reset_index(drop=True)
@@ -745,6 +772,7 @@ def mp_home_page():
             if not monthly_df.empty and "Mes" in monthly_df.columns and current_month in monthly_df["Mes"].astype(str).values:
                 monthly_df = monthly_df[monthly_df["Mes"].astype(str) != current_month]
             monthly_df = pd.concat([monthly_df, pd.DataFrame([record])], ignore_index=True)
+            monthly_df = monthly_df.reindex(columns=MP_MONTHLY_COLUMNS)
             st.session_state.mp_monthly_rows_df = monthly_df
             mp_save_monthly_rows(monthly_df)
             st.success("Mes guardado en el historial.")
@@ -822,9 +850,11 @@ def mp_home_page():
     if monthly_df.empty:
         st.info("Todavía no has guardado ningún mes.")
     else:
+        mp_csv_download_button(monthly_df, "resumen_mensual.csv", "Guardar CSV")
         display_monthly = monthly_df.copy()
         if "Ahorros" not in display_monthly.columns:
             display_monthly["Ahorros"] = 0.0
+        display_monthly = display_monthly.reindex(columns=MP_MONTHLY_COLUMNS)
         for col in ["Ingresos", "Gastos fijos", "Gastos variables", "Ahorros", "Presupuesto", "Balance"]:
             display_monthly[col] = display_monthly[col].apply(mp_currency)
         st.dataframe(display_monthly.sort_values(by="Mes", ascending=False), use_container_width=True, hide_index=True)
