@@ -909,10 +909,11 @@ def mp_home_page():
 
     savings_by_cat = savings_df.groupby("Categoria", as_index=False)[["Ahorro"]].sum() if not savings_df.empty else pd.DataFrame(columns=["Categoria", "Ahorro"])
 
-    col1, col2, col3, col4 = st.columns(4)
+    row1_col1, row1_col2 = st.columns(2)
+    row2_col1, row2_col2 = st.columns(2)
 
     # Gastos pie (by actual)
-    with col1:
+    with row1_col1:
         st.markdown("**Gastos (Actual)**")
         if not expenses_by_cat.empty and expenses_by_cat["Valor"].sum() > 0:
             fig1 = px.pie(expenses_by_cat, names="Categoria", values="Valor", title="Gastos por categoría (Actual)")
@@ -921,7 +922,7 @@ def mp_home_page():
             st.info("No hay gastos registrados.")
 
     # Ingresos pie
-    with col2:
+    with row1_col2:
         st.markdown("**Ingresos**")
         if not income_by_cat.empty and income_by_cat["Ingreso"].sum() > 0:
             fig2 = px.pie(income_by_cat, names="Categoria", values="Ingreso", title="Ingresos por categoría")
@@ -930,7 +931,7 @@ def mp_home_page():
             st.info("No hay ingresos registrados.")
 
     # Presupuesto pie
-    with col3:
+    with row2_col1:
         st.markdown("**Presupuesto**")
         if not budget_by_cat.empty and budget_by_cat["Valor"].sum() > 0:
             fig3 = px.pie(budget_by_cat, names="Categoria", values="Valor", title="Presupuesto por categoría")
@@ -939,7 +940,7 @@ def mp_home_page():
             st.info("No hay presupuesto registrado.")
 
     # Ahorros pie
-    with col4:
+    with row2_col2:
         st.markdown("**Ahorros**")
         if not savings_by_cat.empty and savings_by_cat["Ahorro"].sum() > 0:
             fig4 = px.pie(savings_by_cat, names="Categoria", values="Ahorro", title="Ahorros por categoría")
