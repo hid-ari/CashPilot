@@ -54,6 +54,7 @@ DEFAULT_ROWS = [
 ]
 
 DATA_FILE = "gastos.json"
+SETTINGS_FILE = "settings.json"
 
 
 def rows_to_frame(rows):
@@ -85,7 +86,12 @@ def save_rows(df):
 
 
 def format_currency(amount):
-    return f"DOP {amount:,.2f}"
+    currency = "DOP"
+    try:
+        currency = st.session_state.get("profile", {}).get("currency", "DOP")
+    except Exception:
+        currency = "DOP"
+    return f"{currency} {amount:,.2f}"
 
 
 def init_state():
@@ -384,7 +390,46 @@ def mp_save_monthly_rows(df):
 
 
 def mp_currency(amount):
-    return f"DOP {amount:,.2f}"
+    currency = "DOP"
+    try:
+        currency = st.session_state.get("profile", {}).get("currency", "DOP")
+    except Exception:
+        currency = "DOP"
+    return f"{currency} {amount:,.2f}"
+
+
+def load_settings():
+    if os.path.exists(SETTINGS_FILE):
+        try:
+            with open(SETTINGS_FILE, "r", encoding="utf-8") as fh:
+                return json.load(fh)
+        except Exception:
+            pass
+    return {"name": "Usuario", "currency": "DOP"}
+
+
+def save_settings(settings):
+    with open(SETTINGS_FILE, "w", encoding="utf-8") as fh:
+        json.dump(settings, fh, ensure_ascii=False, indent=2)
+
+
+def init_profile_state():
+    if "profile" not in st.session_state:
+        st.session_state.profile = load_settings()
+
+
+def build_profile_panel():
+    init_profile_state()
+    st.header("Perfil")
+    name = st.text_input("Nombre de usuario", value=st.session_state.profile.get("name", ""))
+    currency = st.selectbox("Moneda", options=["DOP", "USD", "EUR", "ARS", "CLP"], index=["DOP", "USD", "EUR", "ARS", "CLP"].index(st.session_state.profile.get("currency", "DOP")))
+    cols = st.columns([1, 1])
+    if cols[0].button("Guardar perfil"):
+        st.session_state.profile["name"] = name
+        st.session_state.profile["currency"] = currency
+        save_settings(st.session_state.profile)
+        st.success("Perfil guardado.")
+        st.experimental_rerun()
 
 
 def mp_init_state():
@@ -879,12 +924,18 @@ def mp_home_page():
 
 def mp_sidebar_page():
     st.sidebar.title("Navegación")
-    return st.sidebar.radio("Ir a", ["Home", "Gastos fijos", "Gastos variables", "Ingresos", "Ahorros"], index=0, label_visibility="collapsed")
+    return st.sidebar.radio(
+        "Ir a",
+        ["Home", "Gastos fijos", "Gastos variables", "Ingresos", "Ahorros", "Perfil"],
+        index=0,
+        label_visibility="collapsed",
+    )
 
 
 def main():
     st.set_page_config(page_title="CashPilot", layout="wide")
     mp_init_state()
+    init_profile_state()
 
     page = mp_sidebar_page()
 
@@ -898,6 +949,8 @@ def main():
         mp_income_page()
     elif page == "Ahorros":
         mp_savings_page()
+    elif page == "Perfil":
+        build_profile_panel()
 
 
 if __name__ == "__main__":
