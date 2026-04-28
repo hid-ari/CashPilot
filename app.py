@@ -3,8 +3,7 @@ import os
 import uuid
 
 import pandas as pd
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+import matplotlib.pyplot as plt
 import streamlit as st
 
 
@@ -645,57 +644,32 @@ def mp_home_page():
     budget_summary = budget_summary.groupby("Categoria", as_index=False)["Presupuesto"].sum() if not budget_summary.empty else budget_summary
     income_summary = income_df.groupby("Categoria", as_index=False)["Ingreso"].sum() if not income_df.empty else pd.DataFrame(columns=["Categoria", "Ingreso"])
 
-    fig = make_subplots(
-        rows=1,
-        cols=3,
-        specs=[[{"type": "domain"}, {"type": "domain"}, {"type": "domain"}]],
-        subplot_titles=("Total de gastos", "Total de ingresos", "Total de presupuesto"),
-    )
+    fig, axes = plt.subplots(1, 3, figsize=(16, 5))
+    datasets = [
+        (axes[0], expense_summary, "Total de gastos", "Actual", "#ef4444"),
+        (axes[1], income_summary, "Total de ingresos", "Ingreso", "#22c55e"),
+        (axes[2], budget_summary, "Total de presupuesto", "Presupuesto", "#3b82f6"),
+    ]
 
-    if not expense_summary.empty:
-        fig.add_trace(
-            go.Pie(
-                labels=expense_summary["Categoria"],
-                values=expense_summary["Actual"],
-                name="Gastos",
-                hole=0.35,
-            ),
-            row=1,
-            col=1,
-        )
-    else:
-        fig.add_trace(go.Pie(labels=["Sin datos"], values=[1], name="Gastos", hole=0.35), row=1, col=1)
+    for ax, data, title, value_col, color in datasets:
+        if not data.empty and data[value_col].sum() > 0:
+            ax.pie(
+                data[value_col],
+                labels=data["Categoria"],
+                autopct="%1.1f%%",
+                startangle=90,
+                colors=plt.cm.Set3.colors,
+                textprops={"fontsize": 8},
+            )
+            total = data[value_col].sum()
+        else:
+            ax.pie([1], labels=["Sin datos"], colors=["#d1d5db"], startangle=90)
+            total = 0
+        ax.set_title(f"{title}\n{mp_currency(total)}", fontsize=12)
+        ax.axis("equal")
 
-    if not income_summary.empty:
-        fig.add_trace(
-            go.Pie(
-                labels=income_summary["Categoria"],
-                values=income_summary["Ingreso"],
-                name="Ingresos",
-                hole=0.35,
-            ),
-            row=1,
-            col=2,
-        )
-    else:
-        fig.add_trace(go.Pie(labels=["Sin datos"], values=[1], name="Ingresos", hole=0.35), row=1, col=2)
-
-    if not budget_summary.empty:
-        fig.add_trace(
-            go.Pie(
-                labels=budget_summary["Categoria"],
-                values=budget_summary["Presupuesto"],
-                name="Presupuesto",
-                hole=0.35,
-            ),
-            row=1,
-            col=3,
-        )
-    else:
-        fig.add_trace(go.Pie(labels=["Sin datos"], values=[1], name="Presupuesto", hole=0.35), row=1, col=3)
-
-    fig.update_layout(height=520, margin=dict(t=70, l=10, r=10, b=10), showlegend=False)
-    st.plotly_chart(fig, use_container_width=True)
+    plt.tight_layout()
+    st.pyplot(fig, use_container_width=True)
 
 
 def mp_sidebar_page():
