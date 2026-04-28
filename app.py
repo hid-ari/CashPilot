@@ -3,6 +3,8 @@ import os
 import uuid
 
 import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit as st
 
 
@@ -622,30 +624,78 @@ def mp_home_page():
     c5.metric("Balance", mp_currency(balance))
 
     st.divider()
-    left, right = st.columns(2)
+    st.subheader("Distribución general")
 
-    with left:
-        st.subheader("Resumen de gastos por categoría")
-        exp_summary = pd.concat(
-            [
-                fixed_df[["Categoria", "Presupuesto", "Actual"]],
-                variable_df[["Categoria", "Presupuesto", "Actual"]],
-            ],
-            ignore_index=True,
-        ) if (not fixed_df.empty or not variable_df.empty) else pd.DataFrame(columns=["Categoria", "Presupuesto", "Actual"])
-        if not exp_summary.empty:
-            exp_summary = exp_summary.groupby("Categoria", as_index=True)[["Presupuesto", "Actual"]].sum()
-            st.bar_chart(exp_summary)
-        else:
-            st.info("No hay gastos para mostrar.")
+    expense_summary = pd.concat(
+        [
+            fixed_df[["Categoria", "Actual"]],
+            variable_df[["Categoria", "Actual"]],
+        ],
+        ignore_index=True,
+    ) if (not fixed_df.empty or not variable_df.empty) else pd.DataFrame(columns=["Categoria", "Actual"])
+    budget_summary = pd.concat(
+        [
+            fixed_df[["Categoria", "Presupuesto"]],
+            variable_df[["Categoria", "Presupuesto"]],
+        ],
+        ignore_index=True,
+    ) if (not fixed_df.empty or not variable_df.empty) else pd.DataFrame(columns=["Categoria", "Presupuesto"])
 
-    with right:
-        st.subheader("Ingresos por categoría")
-        if not income_df.empty:
-            income_summary = income_df.groupby("Categoria", as_index=True)[["Ingreso"]].sum()
-            st.bar_chart(income_summary)
-        else:
-            st.info("No hay ingresos para mostrar.")
+    expense_summary = expense_summary.groupby("Categoria", as_index=False)["Actual"].sum() if not expense_summary.empty else expense_summary
+    budget_summary = budget_summary.groupby("Categoria", as_index=False)["Presupuesto"].sum() if not budget_summary.empty else budget_summary
+    income_summary = income_df.groupby("Categoria", as_index=False)["Ingreso"].sum() if not income_df.empty else pd.DataFrame(columns=["Categoria", "Ingreso"])
+
+    fig = make_subplots(
+        rows=1,
+        cols=3,
+        specs=[[{"type": "domain"}, {"type": "domain"}, {"type": "domain"}]],
+        subplot_titles=("Total de gastos", "Total de ingresos", "Total de presupuesto"),
+    )
+
+    if not expense_summary.empty:
+        fig.add_trace(
+            go.Pie(
+                labels=expense_summary["Categoria"],
+                values=expense_summary["Actual"],
+                name="Gastos",
+                hole=0.35,
+            ),
+            row=1,
+            col=1,
+        )
+    else:
+        fig.add_trace(go.Pie(labels=["Sin datos"], values=[1], name="Gastos", hole=0.35), row=1, col=1)
+
+    if not income_summary.empty:
+        fig.add_trace(
+            go.Pie(
+                labels=income_summary["Categoria"],
+                values=income_summary["Ingreso"],
+                name="Ingresos",
+                hole=0.35,
+            ),
+            row=1,
+            col=2,
+        )
+    else:
+        fig.add_trace(go.Pie(labels=["Sin datos"], values=[1], name="Ingresos", hole=0.35), row=1, col=2)
+
+    if not budget_summary.empty:
+        fig.add_trace(
+            go.Pie(
+                labels=budget_summary["Categoria"],
+                values=budget_summary["Presupuesto"],
+                name="Presupuesto",
+                hole=0.35,
+            ),
+            row=1,
+            col=3,
+        )
+    else:
+        fig.add_trace(go.Pie(labels=["Sin datos"], values=[1], name="Presupuesto", hole=0.35), row=1, col=3)
+
+    fig.update_layout(height=520, margin=dict(t=70, l=10, r=10, b=10), showlegend=False)
+    st.plotly_chart(fig, use_container_width=True)
 
 
 def mp_sidebar_page():
