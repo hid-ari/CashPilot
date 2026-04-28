@@ -758,7 +758,8 @@ def mp_home_page():
     save_col, info_col = st.columns([1, 4])
     with save_col:
         if st.button("Guardar mes", key="save_month_button"):
-            monthly_df = st.session_state.mp_monthly_rows_df.copy()
+            # Load the complete history from file to ensure we don't lose previous records
+            monthly_df = mp_load_monthly_rows()
             record = {
                 "Mes": current_month,
                 "Ingresos": income_total,
