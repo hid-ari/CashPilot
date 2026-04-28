@@ -57,7 +57,7 @@ def rows_to_frame(rows):
     frame = pd.DataFrame(rows, columns=["Categoria", "Gasto", "Presupuesto", "Actual"])
     if frame.empty:
         frame = pd.DataFrame(columns=["Categoria", "Gasto", "Presupuesto", "Actual"])
-    frame["Categoria"] = frame.get("Categoria", pd.Series(dtype=str)).fillna("Otros").astype(str)
+    frame["Categoria"] = frame.get("Categoria", pd.Series(dtype=str)).fillna("").astype(str)
     frame["Gasto"] = frame.get("Gasto", pd.Series(dtype=str)).fillna("").astype(str)
     frame["Presupuesto"] = pd.to_numeric(frame.get("Presupuesto", 0), errors="coerce").fillna(0.0)
     frame["Actual"] = pd.to_numeric(frame.get("Actual", 0), errors="coerce").fillna(0.0)
@@ -87,44 +87,29 @@ def format_currency(amount):
 def init_state():
     if "rows_df" not in st.session_state:
         st.session_state.rows_df = load_rows()
-    if "selected_category" not in st.session_state:
-        st.session_state.selected_category = "Alimentación"
 
 
-def build_add_form():
-    st.subheader("Nuevo gasto fijo")
-    with st.form("add_form", clear_on_submit=True):
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            categoria = st.selectbox("Categoría", list(CATEGORIES.keys()), index=list(CATEGORIES.keys()).index(st.session_state.selected_category))
-            gasto_opciones = CATEGORIES.get(categoria, [])
-            gasto = st.selectbox("Gasto", gasto_opciones + ["Otro"], index=0 if gasto_opciones else 0)
-            gasto_custom = st.text_input("Si elegiste Otro, escribe el gasto", value="") if gasto == "Otro" else ""
-        with col2:
-            presupuesto = st.number_input("Presupuesto", min_value=0.0, value=0.0, step=1.0)
-            actual = st.number_input("Actual", min_value=0.0, value=0.0, step=1.0)
-
-        submitted = st.form_submit_button("Agregar")
-
-    if submitted:
-        gasto_final = gasto_custom.strip() if gasto == "Otro" else gasto
-        if not gasto_final:
-            st.warning("Escribe un gasto válido.")
-            return
-        new_row = pd.DataFrame([
+def add_blank_row():
+    blank_row = pd.DataFrame(
+        [
             {
-                "Categoria": categoria,
-                "Gasto": gasto_final,
-                "Presupuesto": float(presupuesto),
-                "Actual": float(actual),
+                "Categoria": "",
+                "Gasto": "",
+                "Presupuesto": 0.0,
+                "Actual": 0.0,
             }
-        ])
-        st.session_state.rows_df = pd.concat([st.session_state.rows_df, new_row], ignore_index=True)
-        st.success("Registro agregado.")
+        ]
+    )
+    st.session_state.rows_df = pd.concat([st.session_state.rows_df, blank_row], ignore_index=True)
 
 
 def build_editor_panel():
     st.subheader("Gastos fijos")
+    top_actions = st.columns([1, 5])
+    if top_actions[0].button("＋", help="Agregar una fila vacía"):
+        add_blank_row()
+        st.rerun()
+
     df = st.session_state.rows_df.copy().reset_index(drop=True)
 
     filtro = st.text_input("Filtrar por categoría o gasto", value="")
@@ -149,19 +134,20 @@ def build_editor_panel():
     for idx, row in df.iterrows():
         cols = st.columns([1.2, 1.8, 1.2, 1.2, 0.6])
 
-        current_category = row["Categoria"] if row["Categoria"] in CATEGORIES else "Otros"
+        current_category = row["Categoria"] if row["Categoria"] in CATEGORIES else ""
         category_options = list(CATEGORIES.keys())
-        category_index = category_options.index(current_category)
+        category_select_options = [""] + category_options
+        category_index = category_select_options.index(current_category) if current_category in category_select_options else 0
         categoria = cols[0].selectbox(
             "Categoría",
-            category_options,
+            category_select_options,
             index=category_index,
             key=f"edit_categoria_{idx}",
             label_visibility="collapsed",
         )
 
-        gasto_options = CATEGORIES.get(categoria, [])
-        current_gasto = row["Gasto"] if row["Gasto"] in gasto_options else (gasto_options[0] if gasto_options else "")
+        gasto_options = [""] + CATEGORIES.get(categoria, []) if categoria else [""]
+        current_gasto = row["Gasto"] if row["Gasto"] in gasto_options else ""
         gasto_index = gasto_options.index(current_gasto) if current_gasto in gasto_options else 0
         gasto = cols[1].selectbox(
             "Gasto",
@@ -265,8 +251,6 @@ def main():
     st.title("Control de gastos")
     st.caption("Organiza categorías, presupuesto y gasto real en una sola pantalla.")
 
-    build_add_form()
-    st.divider()
     build_summary_panel()
     st.divider()
     build_editor_panel()
