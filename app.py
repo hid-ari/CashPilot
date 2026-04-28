@@ -373,31 +373,11 @@ def mp_load_monthly_rows():
 
 def mp_save_monthly_rows(df):
     file_path = MP_DATA_FILES["monthly"]
-    
-    # Load existing data from file to preserve history
-    existing_df = pd.DataFrame(columns=MP_MONTHLY_COLUMNS)
-    if os.path.exists(file_path):
-        try:
-            with open(file_path, "r", encoding="utf-8") as fh:
-                existing_data = json.load(fh)
-                if existing_data:
-                    existing_df = pd.DataFrame(existing_data)
-        except Exception:
-            pass
-    
-    # Combine existing data with new data
-    combined_df = pd.concat([existing_df, df], ignore_index=True)
-    
-    # Remove duplicates by month, keeping the most recent one
-    if not combined_df.empty and "Mes" in combined_df.columns:
-        combined_df = combined_df.sort_values("Mes", ascending=False).drop_duplicates(subset=["Mes"], keep="first").sort_values("Mes", ascending=False)
-    
-    # Ensure all columns are present and in correct order
+    ordered_df = df.copy()
     for col in MP_MONTHLY_COLUMNS:
-        if col not in combined_df.columns:
-            combined_df[col] = "" if col in ["Mes", "Guardado"] else 0.0
-    
-    ordered_df = combined_df[MP_MONTHLY_COLUMNS]
+        if col not in ordered_df.columns:
+            ordered_df[col] = "" if col in ["Mes", "Guardado"] else 0.0
+    ordered_df = ordered_df[MP_MONTHLY_COLUMNS]
     payload = ordered_df.to_dict(orient="records")
     with open(file_path, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
@@ -789,13 +769,16 @@ def mp_home_page():
                 "Balance": balance,
                 "Guardado": current_saved_at,
             }
-            if not monthly_df.empty and "Mes" in monthly_df.columns and current_month in monthly_df["Mes"].astype(str).values:
+            # Remove existing record for current month if it exists
+            if not monthly_df.empty and "Mes" in monthly_df.columns:
                 monthly_df = monthly_df[monthly_df["Mes"].astype(str) != current_month]
+            # Add new record
             monthly_df = pd.concat([monthly_df, pd.DataFrame([record])], ignore_index=True)
             monthly_df = monthly_df.reindex(columns=MP_MONTHLY_COLUMNS)
             st.session_state.mp_monthly_rows_df = monthly_df
             mp_save_monthly_rows(monthly_df)
             st.success("Mes guardado en el historial.")
+            st.rerun()
     with info_col:
         st.info(f"Mes actual: {current_month}")
 
