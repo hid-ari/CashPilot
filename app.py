@@ -837,9 +837,9 @@ def mp_home_page():
         ("Ahorros", mp_currency(savings_total)),
         ("Balance", mp_currency(balance)),
     ]
-    for start in range(0, len(dashboard_metrics), 3):
-        metric_cols = st.columns(3)
-        for col, (label, value) in zip(metric_cols, dashboard_metrics[start:start + 3]):
+    for start in range(0, len(dashboard_metrics), 2):
+        metric_cols = st.columns(2)
+        for col, (label, value) in zip(metric_cols, dashboard_metrics[start:start + 2]):
             col.metric(label, value)
 
     save_col, info_col = st.columns([1, 4])
