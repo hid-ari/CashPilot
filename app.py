@@ -94,6 +94,39 @@ def format_currency(amount):
     return f"{currency} {amount:,.2f}"
 
 
+def apply_nothing_font():
+    st.markdown(
+        """
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Nothing+You+Could+Do&family=Inter:wght@400;500;600;700&display=swap');
+
+        html, body, [class*="css"], .stApp {
+            font-family: 'Inter', sans-serif;
+        }
+
+        h1, h2, h3, h4, h5, h6,
+        .stMetricLabel,
+        .stMetricValue,
+        .stButton > button,
+        .stSelectbox label,
+        .stTextInput label,
+        .stNumberInput label,
+        .stCheckbox label,
+        .stRadio label {
+            font-family: 'Nothing You Could Do', cursive !important;
+            letter-spacing: 0.02em;
+        }
+
+        .stMetricValue {
+            font-size: 1.85rem;
+            line-height: 1.1;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def init_state():
     if "rows_df" not in st.session_state:
         st.session_state.rows_df = load_rows()
@@ -939,6 +972,7 @@ def mp_sidebar_page():
 
 def main():
     st.set_page_config(page_title="CashPilot", layout="wide")
+    apply_nothing_font()
     mp_init_state()
     init_profile_state()
 
