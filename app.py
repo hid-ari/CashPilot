@@ -273,27 +273,17 @@ MP_EXPENSE_CATEGORIES = [
 
 MP_INCOME_CATEGORIES = ["Trabajo", "Mesada", "Negocio", "Inversiones", "Regalos", "Otros"]
 
-MP_DEFAULT_FIXED_ROWS = [
-    {"Categoria": "Alimentación", "Descripcion": "Supermercado", "Presupuesto": 213.00, "Actual": 222.00},
-    {"Categoria": "Finanzas", "Descripcion": "Tarjetas de crédito", "Presupuesto": 0.00, "Actual": 0.00},
-    {"Categoria": "Educación", "Descripcion": "Material", "Presupuesto": 1312.00, "Actual": 313.00},
-    {"Categoria": "Salud", "Descripcion": "Exámenes", "Presupuesto": 1312.00, "Actual": 22223.00},
-]
+MP_DEFAULT_FIXED_ROWS = []
 
-MP_DEFAULT_VARIABLE_ROWS = [
-    {"Categoria": "Alimentación", "Descripcion": "Delivery", "Presupuesto": 500.00, "Actual": 0.00},
-    {"Categoria": "Entretenimiento", "Descripcion": "Salidas", "Presupuesto": 800.00, "Actual": 0.00},
-]
+MP_DEFAULT_VARIABLE_ROWS = []
 
-MP_DEFAULT_INCOME_ROWS = [
-    {"Categoria": "Trabajo", "Descripcion": "Sueldo mensual", "Ingreso": 0.00},
-    {"Categoria": "Mesada", "Descripcion": "", "Ingreso": 0.00},
-]
+MP_DEFAULT_INCOME_ROWS = []
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MP_DATA_FILES = {
-    "fixed": "gastos_fijos.json",
-    "variable": "gastos_variables.json",
-    "income": "ingresos.json",
+    "fixed": os.path.join(BASE_DIR, "gastos_fijos.json"),
+    "variable": os.path.join(BASE_DIR, "gastos_variables.json"),
+    "income": os.path.join(BASE_DIR, "ingresos.json"),
 }
 
 
