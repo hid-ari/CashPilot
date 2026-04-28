@@ -240,22 +240,7 @@ def build_summary_panel():
 
 
 def build_actions():
-    col1, col2, col3 = st.columns([1, 1, 2])
-    with col1:
-        if st.button("Guardar"):
-            try:
-                save_rows(st.session_state.rows_df)
-                st.success(f"Datos guardados en {DATA_FILE}.")
-            except Exception as exc:
-                st.error(f"No se pudo guardar: {exc}")
-    with col2:
-        if st.button("Cargar"):
-            st.session_state.rows_df = load_rows()
-            st.success("Datos cargados.")
-    with col3:
-        if st.button("Restaurar datos iniciales"):
-            st.session_state.rows_df = rows_to_frame(DEFAULT_ROWS)
-            st.info("Datos iniciales restaurados.")
+    st.caption("Los datos base de la tabla inicial se mantienen solo para compatibilidad; las páginas principales se guardan automáticamente.")
 
 
 MP_EXPENSE_CATEGORIES = [
@@ -453,20 +438,9 @@ def mp_merge_rows(full_df, updated_rows):
 def mp_expense_page(title, state_key, file_key, default_rows):
     st.header(title)
 
-    action_cols = st.columns([0.7, 0.9, 0.9, 0.9, 3.6])
+    action_cols = st.columns([0.7, 3.6])
     if action_cols[0].button("＋", key=f"{state_key}_add", help="Agregar fila vacía"):
         mp_add_blank_expense_row(state_key)
-        st.rerun()
-    if action_cols[1].button("Guardar", key=f"{state_key}_save"):
-        mp_save_rows(file_key, st.session_state[state_key], ["row_id"])
-        st.success("Datos guardados.")
-    if action_cols[2].button("Cargar", key=f"{state_key}_load"):
-        st.session_state[state_key] = mp_load_rows(file_key, default_rows, mp_normalize_expense_rows)
-        st.success("Datos cargados.")
-        st.rerun()
-    if action_cols[3].button("Restaurar", key=f"{state_key}_reset"):
-        st.session_state[state_key] = mp_normalize_expense_rows(default_rows)
-        st.info("Datos iniciales restaurados.")
         st.rerun()
 
     filtro = st.text_input("Filtrar por categoría", key=f"{state_key}_filter")
@@ -545,10 +519,12 @@ def mp_expense_page(title, state_key, file_key, default_rows):
         )
 
     st.session_state[state_key] = mp_merge_rows(full_df, updated_rows)
+    mp_save_rows(file_key, st.session_state[state_key], ["row_id"])
 
     bottom_cols = st.columns([1, 1, 4])
     if bottom_cols[0].button("Eliminar marcados", key=f"{state_key}_delete"):
         st.session_state[state_key] = st.session_state[state_key][~st.session_state[state_key]["row_id"].isin(rows_to_remove)].reset_index(drop=True)
+        mp_save_rows(file_key, st.session_state[state_key], ["row_id"])
         st.success("Registros eliminados.")
         st.rerun()
 
@@ -557,20 +533,9 @@ def mp_income_page():
     state_key = "mp_income_rows_df"
     st.header("Ingresos")
 
-    action_cols = st.columns([0.7, 0.9, 0.9, 0.9, 3.6])
+    action_cols = st.columns([0.7, 3.6])
     if action_cols[0].button("＋", key="income_add", help="Agregar fila vacía"):
         mp_add_blank_income_row(state_key)
-        st.rerun()
-    if action_cols[1].button("Guardar", key="income_save"):
-        mp_save_rows("income", st.session_state[state_key], ["row_id"])
-        st.success("Datos guardados.")
-    if action_cols[2].button("Cargar", key="income_load"):
-        st.session_state[state_key] = mp_load_rows("income", MP_DEFAULT_INCOME_ROWS, mp_normalize_income_rows)
-        st.success("Datos cargados.")
-        st.rerun()
-    if action_cols[3].button("Restaurar", key="income_reset"):
-        st.session_state[state_key] = mp_normalize_income_rows(MP_DEFAULT_INCOME_ROWS)
-        st.info("Datos iniciales restaurados.")
         st.rerun()
 
     filtro = st.text_input("Filtrar por categoría", key="income_filter")
@@ -639,9 +604,11 @@ def mp_income_page():
         )
 
     st.session_state[state_key] = mp_merge_rows(full_df, updated_rows)
+    mp_save_rows("income", st.session_state[state_key], ["row_id"])
 
     if st.button("Eliminar marcados", key="income_delete"):
         st.session_state[state_key] = st.session_state[state_key][~st.session_state[state_key]["row_id"].isin(rows_to_remove)].reset_index(drop=True)
+        mp_save_rows("income", st.session_state[state_key], ["row_id"])
         st.success("Registros eliminados.")
         st.rerun()
 
@@ -650,20 +617,9 @@ def mp_savings_page():
     state_key = "mp_savings_rows_df"
     st.header("Ahorros")
 
-    action_cols = st.columns([0.7, 0.9, 0.9, 0.9, 3.6])
+    action_cols = st.columns([0.7, 3.6])
     if action_cols[0].button("＋", key="savings_add", help="Agregar fila vacía"):
         mp_add_blank_savings_row(state_key)
-        st.rerun()
-    if action_cols[1].button("Guardar", key="savings_save"):
-        mp_save_rows("savings", st.session_state[state_key], ["row_id"])
-        st.success("Datos guardados.")
-    if action_cols[2].button("Cargar", key="savings_load"):
-        st.session_state[state_key] = mp_load_rows("savings", MP_DEFAULT_SAVINGS_ROWS, mp_normalize_savings_rows)
-        st.success("Datos cargados.")
-        st.rerun()
-    if action_cols[3].button("Restaurar", key="savings_reset"):
-        st.session_state[state_key] = mp_normalize_savings_rows(MP_DEFAULT_SAVINGS_ROWS)
-        st.info("Datos iniciales restaurados.")
         st.rerun()
 
     filtro = st.text_input("Filtrar por categoría", key="savings_filter")
@@ -732,9 +688,11 @@ def mp_savings_page():
         )
 
     st.session_state[state_key] = mp_merge_rows(full_df, updated_rows)
+    mp_save_rows("savings", st.session_state[state_key], ["row_id"])
 
     if st.button("Eliminar marcados", key="savings_delete"):
         st.session_state[state_key] = st.session_state[state_key][~st.session_state[state_key]["row_id"].isin(rows_to_remove)].reset_index(drop=True)
+        mp_save_rows("savings", st.session_state[state_key], ["row_id"])
         st.success("Registros eliminados.")
         st.rerun()
 
