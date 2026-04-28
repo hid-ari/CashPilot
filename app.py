@@ -361,11 +361,13 @@ def mp_load_monthly_rows():
                 data = json.load(fh)
             df = pd.DataFrame(data)
             if df.empty:
-                return pd.DataFrame(columns=["Mes", "Ingresos", "Gastos fijos", "Gastos variables", "Presupuesto", "Balance", "Guardado"])
+                return pd.DataFrame(columns=["Mes", "Ingresos", "Gastos fijos", "Gastos variables", "Ahorros", "Presupuesto", "Balance", "Guardado"])
+            if "Ahorros" not in df.columns:
+                df["Ahorros"] = 0.0
             return df
         except Exception:
             pass
-    return pd.DataFrame(columns=["Mes", "Ingresos", "Gastos fijos", "Gastos variables", "Presupuesto", "Balance", "Guardado"])
+    return pd.DataFrame(columns=["Mes", "Ingresos", "Gastos fijos", "Gastos variables", "Ahorros", "Presupuesto", "Balance", "Guardado"])
 
 
 def mp_save_monthly_rows(df):
@@ -777,6 +779,7 @@ def mp_home_page():
                 "Ingresos": income_total,
                 "Gastos fijos": fixed_actual,
                 "Gastos variables": variable_actual,
+                "Ahorros": savings_total,
                 "Presupuesto": total_budget,
                 "Balance": balance,
                 "Guardado": current_saved_at,
@@ -815,7 +818,9 @@ def mp_home_page():
 
     budget_by_cat = budget_all.groupby("Categoria", as_index=False)["Valor"].sum() if not budget_all.empty else pd.DataFrame(columns=["Categoria", "Valor"]) 
 
-    col1, col2, col3 = st.columns(3)
+    savings_by_cat = savings_df.groupby("Categoria", as_index=False)[["Ahorro"]].sum() if not savings_df.empty else pd.DataFrame(columns=["Categoria", "Ahorro"])
+
+    col1, col2, col3, col4 = st.columns(4)
 
     # Gastos pie (by actual)
     with col1:
@@ -844,6 +849,15 @@ def mp_home_page():
         else:
             st.info("No hay presupuesto registrado.")
 
+    # Ahorros pie
+    with col4:
+        st.markdown("**Ahorros**")
+        if not savings_by_cat.empty and savings_by_cat["Ahorro"].sum() > 0:
+            fig4 = px.pie(savings_by_cat, names="Categoria", values="Ahorro", title="Ahorros por categoría")
+            st.plotly_chart(fig4, use_container_width=True)
+        else:
+            st.info("No hay ahorros registrados.")
+
     st.divider()
     st.subheader("Resumen mensual guardado")
     monthly_df = st.session_state.mp_monthly_rows_df.copy()
@@ -851,7 +865,9 @@ def mp_home_page():
         st.info("Todavía no has guardado ningún mes.")
     else:
         display_monthly = monthly_df.copy()
-        for col in ["Ingresos", "Gastos fijos", "Gastos variables", "Presupuesto", "Balance"]:
+        if "Ahorros" not in display_monthly.columns:
+            display_monthly["Ahorros"] = 0.0
+        for col in ["Ingresos", "Gastos fijos", "Gastos variables", "Ahorros", "Presupuesto", "Balance"]:
             display_monthly[col] = display_monthly[col].apply(mp_currency)
         st.dataframe(display_monthly.sort_values(by="Mes", ascending=False), use_container_width=True, hide_index=True)
 
