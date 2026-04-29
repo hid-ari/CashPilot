@@ -221,6 +221,15 @@ MP_DEFAULT_SAVINGS_ROWS = []
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+ADMIN_DATA_DOCUMENTS = [
+    ("settings", "Perfil"),
+    ("fixed", "Gastos fijos"),
+    ("variable", "Gastos variables"),
+    ("income", "Ingresos"),
+    ("savings", "Ahorros"),
+    ("monthly", "Resumen mensual"),
+]
+
 
 def get_mp_data_files():
     username = st.session_state.get("current_user")
@@ -233,6 +242,64 @@ def get_mp_data_files():
         "savings": get_user_data_file(username, "savings"),
         "monthly": get_user_data_file(username, "monthly"),
     }
+
+
+def format_size_bytes(size_bytes):
+    if size_bytes < 1024:
+        return f"{size_bytes} B"
+    if size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    return f"{size_bytes / (1024 * 1024):.1f} MB"
+
+
+def get_data_document_path(username, doc_key):
+    if doc_key == "settings":
+        return get_user_settings_file(username)
+    return get_user_data_file(username, doc_key)
+
+
+def get_document_record_count(file_path):
+    try:
+        with open(file_path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        if isinstance(data, list):
+            return len(data), "OK"
+        if isinstance(data, dict):
+            return len(data.keys()), "OK"
+        return 1, "OK"
+    except Exception:
+        return 0, "Inválido"
+
+
+def get_all_users_documents_status(users):
+    rows = []
+    for username in sorted(users.keys()):
+        for doc_key, doc_label in ADMIN_DATA_DOCUMENTS:
+            file_path = get_data_document_path(username, doc_key)
+            exists = os.path.exists(file_path)
+
+            if exists:
+                size_text = format_size_bytes(os.path.getsize(file_path))
+                modified = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime("%Y-%m-%d %H:%M")
+                records, status = get_document_record_count(file_path)
+            else:
+                size_text = "0 B"
+                modified = "-"
+                records = 0
+                status = "Falta"
+
+            rows.append(
+                {
+                    "Usuario": username,
+                    "Documento": doc_label,
+                    "Estado": status,
+                    "Registros": records,
+                    "Tamaño": size_text,
+                    "Actualizado": modified,
+                }
+            )
+
+    return rows
 
 
 MP_MONTHLY_COLUMNS = ["Mes", "Ingresos", "Gastos fijos", "Gastos variables", "Ahorros", "Presupuesto", "Balance", "Guardado"]
@@ -397,8 +464,15 @@ def delete_app_data():
 
 
 def init_profile_state():
+    current_user = st.session_state.get("current_user")
+    if st.session_state.get("profile_owner") != current_user:
+        st.session_state.profile = load_settings()
+        st.session_state.profile_owner = current_user
+        return
+
     if "profile" not in st.session_state:
         st.session_state.profile = load_settings()
+        st.session_state.profile_owner = current_user
 
 
 def build_profile_panel():
@@ -437,6 +511,16 @@ def build_profile_panel():
 
 
 def mp_init_state():
+    current_user = st.session_state.get("current_user")
+    if st.session_state.get("mp_state_owner") != current_user:
+        st.session_state.mp_fixed_rows_df = mp_load_rows("fixed", MP_DEFAULT_FIXED_ROWS, mp_normalize_expense_rows)
+        st.session_state.mp_variable_rows_df = mp_load_rows("variable", MP_DEFAULT_VARIABLE_ROWS, mp_normalize_expense_rows)
+        st.session_state.mp_income_rows_df = mp_load_rows("income", MP_DEFAULT_INCOME_ROWS, mp_normalize_income_rows)
+        st.session_state.mp_savings_rows_df = mp_load_rows("savings", MP_DEFAULT_SAVINGS_ROWS, mp_normalize_savings_rows)
+        st.session_state.mp_monthly_rows_df = mp_load_monthly_rows()
+        st.session_state.mp_state_owner = current_user
+        return
+
     if "mp_fixed_rows_df" not in st.session_state:
         st.session_state.mp_fixed_rows_df = mp_load_rows("fixed", MP_DEFAULT_FIXED_ROWS, mp_normalize_expense_rows)
     if "mp_variable_rows_df" not in st.session_state:
@@ -447,6 +531,7 @@ def mp_init_state():
         st.session_state.mp_savings_rows_df = mp_load_rows("savings", MP_DEFAULT_SAVINGS_ROWS, mp_normalize_savings_rows)
     if "mp_monthly_rows_df" not in st.session_state:
         st.session_state.mp_monthly_rows_df = mp_load_monthly_rows()
+    st.session_state.mp_state_owner = current_user
 
 
 def mp_add_blank_expense_row(state_key):
@@ -976,6 +1061,20 @@ def build_admin_panel():
         )
 
     st.dataframe(pd.DataFrame(user_rows), use_container_width=True, hide_index=True)
+
+    st.divider()
+    st.subheader("Estado de documentos de datos")
+    st.caption("Muestra el estado de los archivos por usuario.")
+
+    document_rows = get_all_users_documents_status(users)
+    user_filter_options = ["Todos"] + sorted(users.keys())
+    selected_user_filter = st.selectbox("Filtrar por usuario", options=user_filter_options, key="admin_docs_filter")
+
+    document_df = pd.DataFrame(document_rows)
+    if selected_user_filter != "Todos":
+        document_df = document_df[document_df["Usuario"] == selected_user_filter]
+
+    st.dataframe(document_df, use_container_width=True, hide_index=True)
 
     st.divider()
     st.subheader("Acciones")
