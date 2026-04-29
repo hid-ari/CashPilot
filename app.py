@@ -925,16 +925,7 @@ def mp_home_page():
         for col, (label, value) in zip(metric_cols, dashboard_metrics[start:start + 2]):
             col.metric(label, value)
 
-    month_col, day_col, save_col, info_col = st.columns([1.7, 1.0, 1.2, 3.1])
-    with month_col:
-        selected_month_name = st.selectbox(
-            "Mes",
-            MONTH_NAME_OPTIONS,
-            index=MONTH_NAME_OPTIONS.index(current_month_name),
-            key="summary_month_name",
-        )
-    with day_col:
-        selected_day = st.number_input("Día", min_value=1, max_value=31, value=current_day, step=1, key="summary_day")
+    save_col, info_col = st.columns([1, 4])
     with save_col:
         if st.button("Guardar mes", key="save_month_button"):
             # ALWAYS load fresh from file to preserve all history
@@ -950,8 +941,8 @@ def mp_home_page():
             
             # Add new record
             new_record = {
-                "Mes": selected_month_name,
-                "Día": int(selected_day),
+                "Mes": current_month_name,
+                "Día": int(current_day),
                 "Ingresos": income_total,
                 "Gastos fijos": fixed_actual,
                 "Gastos variables": variable_actual,
@@ -971,7 +962,7 @@ def mp_home_page():
             st.success("Mes guardado en el historial.")
             st.rerun()
     with info_col:
-        st.info(f"Fecha sugerida: {current_day} de {current_month_name}")
+        st.info(f"Fecha utilizada: {current_day} de {current_month_name}")
 
     st.divider()
     st.subheader("Gráfica resumen")
