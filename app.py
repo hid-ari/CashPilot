@@ -908,9 +908,6 @@ def mp_home_page():
                 except Exception:
                     existing_monthly = []
             
-            # Remove current month if it exists
-            existing_monthly = [row for row in existing_monthly if row.get("Mes") != current_month]
-            
             # Add new record
             new_record = {
                 "Mes": current_month,
