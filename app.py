@@ -2,7 +2,6 @@ import json
 import os
 import shutil
 import uuid
-import calendar
 from datetime import datetime
 
 import pandas as pd
@@ -212,15 +211,7 @@ MP_INCOME_CATEGORIES = ["Trabajo", "Mesada", "Negocio", "Inversiones", "Regalos"
 
 MP_SAVINGS_CATEGORIES = ["Emergencia", "Viajes", "Inversión", "Meta personal", "Otros"]
 
-MP_DEFAULT_FIXED_ROWS = []
-
-MP_DEFAULT_VARIABLE_ROWS = []
-
-MP_DEFAULT_INCOME_ROWS = []
-
-MP_DEFAULT_SAVINGS_ROWS = []
-
-MP_MONTH_NAMES = [
+MONTH_NAME_OPTIONS = [
     "Enero",
     "Febrero",
     "Marzo",
@@ -234,6 +225,14 @@ MP_MONTH_NAMES = [
     "Noviembre",
     "Diciembre",
 ]
+
+MP_DEFAULT_FIXED_ROWS = []
+
+MP_DEFAULT_VARIABLE_ROWS = []
+
+MP_DEFAULT_INCOME_ROWS = []
+
+MP_DEFAULT_SAVINGS_ROWS = []
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -318,7 +317,7 @@ def get_all_users_documents_status(users):
     return rows
 
 
-MP_MONTHLY_COLUMNS = ["Mes", "Dia", "Ingresos", "Gastos fijos", "Gastos variables", "Ahorros", "Presupuesto", "Balance", "Guardado"]
+MP_MONTHLY_COLUMNS = ["Mes", "Día", "Ingresos", "Gastos fijos", "Gastos variables", "Ahorros", "Presupuesto", "Balance", "Guardado"]
 
 
 def mp_new_id():
@@ -405,11 +404,17 @@ def mp_load_monthly_rows():
                 return pd.DataFrame(columns=MP_MONTHLY_COLUMNS)
             if "Ahorros" not in df.columns:
                 df["Ahorros"] = 0.0
-            if "Dia" not in df.columns:
-                df["Dia"] = ""
+            if "Día" not in df.columns:
+                df["Día"] = 1
             for col in MP_MONTHLY_COLUMNS:
                 if col not in df.columns:
-                    df[col] = "" if col in ["Mes", "Guardado"] else 0.0
+                    if col in ["Mes", "Guardado"]:
+                        df[col] = ""
+                    elif col == "Día":
+                        df[col] = 1
+                    else:
+                        df[col] = 0.0
+            df["Día"] = pd.to_numeric(df["Día"], errors="coerce").fillna(1).astype(int).clip(1, 31)
             return df[MP_MONTHLY_COLUMNS]
         except Exception:
             pass
@@ -422,7 +427,13 @@ def mp_save_monthly_rows(df):
     ordered_df = df.copy()
     for col in MP_MONTHLY_COLUMNS:
         if col not in ordered_df.columns:
-            ordered_df[col] = "" if col in ["Mes", "Dia", "Guardado"] else 0.0
+            if col in ["Mes", "Guardado"]:
+                ordered_df[col] = ""
+            elif col == "Día":
+                ordered_df[col] = 1
+            else:
+                ordered_df[col] = 0.0
+    ordered_df["Día"] = pd.to_numeric(ordered_df["Día"], errors="coerce").fillna(1).astype(int).clip(1, 31)
     ordered_df = ordered_df[MP_MONTHLY_COLUMNS]
     payload = ordered_df.to_dict(orient="records")
     with open(file_path, "w", encoding="utf-8") as fh:
@@ -893,17 +904,9 @@ def mp_home_page():
     total_expenses = fixed_actual + variable_actual
     balance = income_total - total_expenses
 
-    now = datetime.now()
-    selected_month = st.selectbox("Mes", options=MP_MONTH_NAMES, index=now.month - 1, key="summary_month_name")
-    selected_month_number = MP_MONTH_NAMES.index(selected_month) + 1
-    selected_day = st.number_input(
-        "Dia",
-        min_value=1,
-        max_value=calendar.monthrange(now.year, selected_month_number)[1],
-        value=min(now.day, calendar.monthrange(now.year, selected_month_number)[1]),
-        step=1,
-        key="summary_day",
-    )
+    current_datetime = datetime.now()
+    current_month_name = MONTH_NAME_OPTIONS[current_datetime.month - 1]
+    current_day = int(current_datetime.strftime("%d"))
     current_saved_at = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     st.title("CashPilot")
@@ -922,7 +925,16 @@ def mp_home_page():
         for col, (label, value) in zip(metric_cols, dashboard_metrics[start:start + 2]):
             col.metric(label, value)
 
-    save_col, info_col = st.columns([1, 4])
+    month_col, day_col, save_col, info_col = st.columns([1.7, 1.0, 1.2, 3.1])
+    with month_col:
+        selected_month_name = st.selectbox(
+            "Mes",
+            MONTH_NAME_OPTIONS,
+            index=MONTH_NAME_OPTIONS.index(current_month_name),
+            key="summary_month_name",
+        )
+    with day_col:
+        selected_day = st.number_input("Día", min_value=1, max_value=31, value=current_day, step=1, key="summary_day")
     with save_col:
         if st.button("Guardar mes", key="save_month_button"):
             # ALWAYS load fresh from file to preserve all history
@@ -938,8 +950,8 @@ def mp_home_page():
             
             # Add new record
             new_record = {
-                "Mes": selected_month,
-                "Dia": int(selected_day),
+                "Mes": selected_month_name,
+                "Día": int(selected_day),
                 "Ingresos": income_total,
                 "Gastos fijos": fixed_actual,
                 "Gastos variables": variable_actual,
@@ -959,7 +971,7 @@ def mp_home_page():
             st.success("Mes guardado en el historial.")
             st.rerun()
     with info_col:
-        st.info(f"Fecha elegida: {selected_month} {int(selected_day)}")
+        st.info(f"Fecha sugerida: {current_day} de {current_month_name}")
 
     st.divider()
     st.subheader("Gráfica resumen")
@@ -1038,8 +1050,8 @@ def mp_home_page():
         display_monthly = monthly_df.copy()
         if "Ahorros" not in display_monthly.columns:
             display_monthly["Ahorros"] = 0.0
-        if "Dia" not in display_monthly.columns:
-            display_monthly["Dia"] = ""
+        if "Día" not in display_monthly.columns:
+            display_monthly["Día"] = 1
         display_monthly = display_monthly.reindex(columns=MP_MONTHLY_COLUMNS)
         for col in ["Ingresos", "Gastos fijos", "Gastos variables", "Ahorros", "Presupuesto", "Balance"]:
             display_monthly[col] = display_monthly[col].apply(mp_currency)
