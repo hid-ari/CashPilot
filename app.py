@@ -1,77 +1,153 @@
-import json
 import os
-from datetime import datetime
 
-import pandas as pd
-import plotly.express as px
 import streamlit as st
 
 from cashpilot.business import (
-    ADMIN_ROLE,
     MP_DEFAULT_FIXED_ROWS,
     MP_DEFAULT_INCOME_ROWS,
     MP_DEFAULT_SAVINGS_ROWS,
     MP_DEFAULT_VARIABLE_ROWS,
-    MP_EXPENSE_CATEGORIES,
-    MP_INCOME_CATEGORIES,
-    MP_MONTHLY_COLUMNS,
-    MP_SAVINGS_CATEGORIES,
-    MONTH_NAME_OPTIONS,
-    build_monthly_record,
-    change_user_password,
-    change_user_role,
     delete_current_user_data,
-    delete_user_account,
-    format_currency,
-    get_all_users_documents_status,
     get_monthly_rows,
     get_user_profile,
     get_user_rows,
-            rows_to_remove.append(row_id)
-
-        updated_rows.append(
-            {
-                "row_id": row_id,
-                "Categoria": categoria,
-                "Descripcion": descripcion,
-                "Presupuesto": float(presupuesto),
-                "Actual": float(actual),
-            }
-        )
-
-    st.session_state[state_key] = mp_merge_rows(full_df, updated_rows)
-    mp_save_rows(file_key, st.session_state[state_key], ["row_id"])
-
-    bottom_cols = st.columns([1, 1, 4])
-    if bottom_cols[0].button("Eliminar marcados", key=f"{state_key}_delete"):
-        st.session_state[state_key] = st.session_state[state_key][~st.session_state[state_key]["row_id"].isin(rows_to_remove)].reset_index(drop=True)
-        mp_save_rows(file_key, st.session_state[state_key], ["row_id"])
-        st.success("Registros eliminados.")
-        st.rerun()
+    is_admin_user,
+    login_user,
+    normalize_expense_rows,
+    normalize_income_rows,
+    normalize_savings_rows,
+    register_user,
+    save_user_profile,
+)
+from cashpilot.data_access import DATA_FILE, SETTINGS_FILE
+from cashpilot.screens import (
+    render_admin_panel,
+    render_expense_page,
+    render_home_page,
+    render_income_page,
+    render_profile_panel,
+    render_savings_page,
+)
+from cashpilot.ui import render_sidebar_navigation
 
 
-def mp_income_page():
-    state_key = "mp_income_rows_df"
-    st.header("Ingresos")
+def apply_space_mono_font():
+    st.markdown(
+        """
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
 
-    action_cols = st.columns([0.7, 1.2, 3.0])
-    if action_cols[0].button("＋", key="income_add", help="Agregar fila vacía"):
-        mp_add_blank_income_row(state_key)
-        st.rerun()
-    with action_cols[1]:
-        mp_csv_download_button(st.session_state[state_key], "ingresos.csv", "Guardar CSV", ["row_id"])
+        html, body, .stApp {
+            font-family: 'Space Mono', monospace !important;
+        }
 
-    filtro = st.text_input("Filtrar por categoría", key="income_filter")
-    full_df = st.session_state[state_key].copy().reset_index(drop=True)
-    if filtro.strip():
-        q = filtro.strip().lower()
-        display_df = full_df[full_df["Categoria"].str.lower().str.contains(q, na=False)]
-    else:
-        display_df = full_df
+        .stMarkdown p,
+        .stMarkdown h1,
+        .stMarkdown h2,
+        .stMarkdown h3,
+        .stMarkdown h4,
+        .stMarkdown h5,
+        .stMarkdown h6,
+        .stMarkdown ul,
+        .stMarkdown ol,
+        .stMarkdown li,
+        .stText,
+        .stCaption,
+        .stButton > button {
+            font-family: 'Space Mono', monospace !important;
+        }
 
-    if display_df.empty:
-        st.info("No hay ingresos para mostrar.")
+        .stMarkdown ul,
+        .stMarkdown ol {
+            padding-left: 1.4rem;
+        }
+
+        .stMetricValue {
+            font-size: 1.85rem;
+            line-height: 1.1;
+            font-family: 'Space Mono', monospace !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def load_settings():
+    username = st.session_state.get("current_user")
+    if not username:
+        return {"name": "Usuario", "currency": "DOP"}
+    return get_user_profile(username)
+
+
+def init_profile_state():
+    current_user = st.session_state.get("current_user")
+    if st.session_state.get("profile_owner") != current_user:
+        st.session_state.profile = load_settings()
+        st.session_state.profile_owner = current_user
         return
+    if "profile" not in st.session_state:
+        st.session_state.profile = load_settings()
+        st.session_state.profile_owner = current_user
+
+
+def mp_init_state():
+    current_user = st.session_state.get("current_user")
+    if st.session_state.get("mp_state_owner") != current_user:
+        st.session_state.mp_fixed_rows_df = get_user_rows(current_user, "fixed", MP_DEFAULT_FIXED_ROWS, normalize_expense_rows)
+        st.session_state.mp_variable_rows_df = get_user_rows(current_user, "variable", MP_DEFAULT_VARIABLE_ROWS, normalize_expense_rows)
+        st.session_state.mp_income_rows_df = get_user_rows(current_user, "income", MP_DEFAULT_INCOME_ROWS, normalize_income_rows)
+        st.session_state.mp_savings_rows_df = get_user_rows(current_user, "savings", MP_DEFAULT_SAVINGS_ROWS, normalize_savings_rows)
+        st.session_state.mp_monthly_rows_df = get_monthly_rows(current_user)
+        st.session_state.mp_state_owner = current_user
+
+
+def delete_app_data():
+    username = st.session_state.get("current_user")
+    if username:
+        delete_current_user_data(username)
+
+    for file_path in [DATA_FILE, SETTINGS_FILE]:
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception:
+                pass
+
+
+def login_register_page():
+    st.title("CashPilot")
+    st.caption("Dashboard financiero personal")
+
+    tab1, tab2 = st.tabs(["Iniciar sesión", "Registrarse"])
+
+    with tab1:
+        st.subheader("Iniciar sesión")
+        login_username = st.text_input("Usuario", key="login_username")
+        login_password = st.text_input("Contraseña", type="password", key="login_password")
+
+        if st.button("Entrar", key="login_button"):
+            success, message = login_user(login_username, login_password)
+            if success:
+                st.session_state.current_user = login_username
+                st.success(message)
+                st.rerun()
+            else:
+                st.error(message)
+
+    with tab2:
+        st.subheader("Crear nueva cuenta")
+        register_username = st.text_input("Usuario", key="register_username")
+        register_password = st.text_input("Contraseña", type="password", key="register_password")
+        register_password_confirm = st.text_input("Confirmar contraseña", type="password", key="register_password_confirm")
+
+        if st.button("Registrarse", key="register_button"):
+            if register_password != register_password_confirm:
+                st.error("Las contraseñas no coinciden.")
+            else:
+                success, message = register_user(register_username, register_password)
+                if success:
+                    st.success(message)
                     st.info("Ahora puedes iniciar sesión con tu nueva cuenta.")
                 else:
                     st.error(message)
@@ -108,14 +184,14 @@ def mp_sidebar_page():
 def main():
     st.set_page_config(page_title="CashPilot", layout="wide")
     apply_space_mono_font()
-    
+
     if "current_user" not in st.session_state:
         st.session_state.current_user = None
-    
+
     if not st.session_state.current_user:
         login_register_page()
         return
-    
+
     mp_init_state()
     init_profile_state()
 
