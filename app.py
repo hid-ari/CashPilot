@@ -1086,24 +1086,49 @@ def build_admin_panel():
     selected_user = st.selectbox("Selecciona un usuario", options=sorted(users.keys()))
     selected_role = users[selected_user].get("role", USER_ROLE)
     current_user = st.session_state.get("current_user")
+    is_current_user_selected = selected_user == current_user
 
     st.write(f"Rol actual: **{selected_role}**")
 
+    st.markdown("**Cambiar contraseña**")
+    new_password_key = f"admin_new_password_{selected_user}"
+    confirm_password_key = f"admin_confirm_password_{selected_user}"
+    password_cols = st.columns([1.2, 1.2, 1.0])
+    new_password = password_cols[0].text_input("Nueva contraseña", type="password", key=new_password_key)
+    confirm_password = password_cols[1].text_input("Confirmar contraseña", type="password", key=confirm_password_key)
+
+    if password_cols[2].button("Actualizar contraseña", key=f"admin_update_password_{selected_user}"):
+        if not new_password.strip():
+            st.error("La contraseña no puede estar vacía.")
+        elif len(new_password) < 4:
+            st.error("La contraseña debe tener al menos 4 caracteres.")
+        elif new_password != confirm_password:
+            st.error("Las contraseñas no coinciden.")
+        else:
+            users[selected_user]["password_hash"] = hash_password(new_password)
+            save_users(users)
+            st.session_state[new_password_key] = ""
+            st.session_state[confirm_password_key] = ""
+            st.success(f"Contraseña actualizada para {selected_user}.")
+            st.rerun()
+
+    st.divider()
+    st.markdown("**Permisos y cuenta**")
+
     action_cols = st.columns(3)
 
-    if selected_user == current_user:
-        st.info("No puedes cambiar tus propios permisos ni eliminar tu cuenta desde el panel admin.")
-        return
+    if is_current_user_selected:
+        st.info("Puedes cambiar tu contraseña, pero no tus propios permisos ni eliminar tu cuenta desde el panel admin.")
 
     if selected_role == USER_ROLE:
-        if action_cols[0].button("Promover a admin", type="primary"):
+        if action_cols[0].button("Promover a admin", type="primary", disabled=is_current_user_selected):
             users[selected_user]["role"] = ADMIN_ROLE
             save_users(users)
             st.success(f"{selected_user} ahora es admin.")
             st.rerun()
     else:
         disable_demote = total_admins <= 1
-        if action_cols[1].button("Quitar admin", disabled=disable_demote):
+        if action_cols[1].button("Quitar admin", disabled=disable_demote or is_current_user_selected):
             users[selected_user]["role"] = USER_ROLE
             save_users(users)
             st.success(f"{selected_user} ahora es usuario.")
@@ -1112,7 +1137,7 @@ def build_admin_panel():
             st.warning("Debe existir al menos un admin en el sistema.")
 
     is_last_admin = selected_role == ADMIN_ROLE and total_admins <= 1
-    if action_cols[2].button("Eliminar usuario", type="secondary", disabled=is_last_admin):
+    if action_cols[2].button("Eliminar usuario", type="secondary", disabled=is_last_admin or is_current_user_selected):
         delete_user_account(selected_user, users)
         st.success(f"Usuario {selected_user} eliminado.")
         st.rerun()
