@@ -271,10 +271,7 @@ def render_home_page():
             st.warning("¿Confirmar? Esto reemplazará los gastos fijos actuales con los del último mes guardado.")
             cc1, cc2 = st.columns(2)
             if cc1.button("✅ Confirmar copia", key="confirm_copy_template"):
-                last = monthly_df.sort_values("Guardado").iloc[-1]
-                # Restore fixed budget from last record (actual amounts reset to 0)
-                for row in st.session_state.mp_fixed_rows_df.itertuples():
-                    pass  # keep existing rows, just reset Actual
+                # Reset Actual column to 0 so the fixed expenses serve as a fresh template
                 st.session_state.mp_fixed_rows_df["Actual"] = 0.0
                 username = st.session_state.get("current_user")
                 from ..business import save_user_rows
