@@ -7,6 +7,9 @@ from ..business import (
     MP_EXPENSE_CATEGORIES,
     MP_INCOME_CATEGORIES,
     MP_SAVINGS_CATEGORIES,
+    get_all_expense_categories,
+    get_all_income_categories,
+    get_all_savings_categories,
     new_id,
     save_user_rows,
 )
@@ -81,6 +84,13 @@ def mp_merge_rows(full_df, updated_rows):
 
 def render_expense_page(title, state_key, file_key, default_rows):
     st.header(title)
+    if title == "Gastos fijos":
+        st.caption("💡 Gastos que se repiten cada mes con un monto fijo: alquiler, cuotas, suscripciones, etc.")
+    else:
+        st.caption("💡 Gastos que varían mes a mes: comida, transporte, entretenimiento, etc.")
+
+    username = st.session_state.get("current_user")
+    expense_categories = get_all_expense_categories(username) if username else MP_EXPENSE_CATEGORIES
 
     action_cols = st.columns([0.7, 1.2, 3.0])
     if action_cols[0].button("＋", key=f"{state_key}_add", help="Agregar fila vacía"):
@@ -115,8 +125,8 @@ def render_expense_page(title, state_key, file_key, default_rows):
         row_id = row["row_id"]
         cols = st.columns([1.35, 2.2, 1.15, 1.15, 0.7])
 
-        category_options = [""] + MP_EXPENSE_CATEGORIES
-        current_category = row["Categoria"] if row["Categoria"] in MP_EXPENSE_CATEGORIES else ""
+        category_options = [""] + expense_categories
+        current_category = row["Categoria"] if row["Categoria"] in expense_categories else ""
         category_index = category_options.index(current_category) if current_category in category_options else 0
         categoria = cols[0].selectbox(
             "Categoría",
@@ -178,6 +188,10 @@ def render_expense_page(title, state_key, file_key, default_rows):
 def render_income_page():
     state_key = "mp_income_rows_df"
     st.header("Ingresos")
+    st.caption("💡 Registra todas tus fuentes de ingresos del mes: salario, freelance, negocios, etc.")
+
+    username = st.session_state.get("current_user")
+    income_categories = get_all_income_categories(username) if username else MP_INCOME_CATEGORIES
 
     action_cols = st.columns([0.7, 1.2, 3.0])
     if action_cols[0].button("＋", key="income_add", help="Agregar fila vacía"):
@@ -211,8 +225,8 @@ def render_income_page():
         row_id = row["row_id"]
         cols = st.columns([1.35, 2.6, 1.25, 0.7])
 
-        category_options = [""] + MP_INCOME_CATEGORIES
-        current_category = row["Categoria"] if row["Categoria"] in MP_INCOME_CATEGORIES else ""
+        category_options = [""] + income_categories
+        current_category = row["Categoria"] if row["Categoria"] in income_categories else ""
         category_index = category_options.index(current_category) if current_category in category_options else 0
         categoria = cols[0].selectbox(
             "Categoría",
@@ -264,6 +278,10 @@ def render_income_page():
 def render_savings_page():
     state_key = "mp_savings_rows_df"
     st.header("Ahorros")
+    st.caption("💡 Registra los montos que apartas cada mes para distintos objetivos de ahorro.")
+
+    username = st.session_state.get("current_user")
+    savings_categories = get_all_savings_categories(username) if username else MP_SAVINGS_CATEGORIES
 
     action_cols = st.columns([0.7, 1.2, 3.0])
     if action_cols[0].button("＋", key="savings_add", help="Agregar fila vacía"):
@@ -297,8 +315,8 @@ def render_savings_page():
         row_id = row["row_id"]
         cols = st.columns([1.35, 2.6, 1.25, 0.7])
 
-        category_options = [""] + MP_SAVINGS_CATEGORIES
-        current_category = row["Categoria"] if row["Categoria"] in MP_SAVINGS_CATEGORIES else ""
+        category_options = [""] + savings_categories
+        current_category = row["Categoria"] if row["Categoria"] in savings_categories else ""
         category_index = category_options.index(current_category) if current_category in category_options else 0
         categoria = cols[0].selectbox(
             "Categoría",
@@ -345,3 +363,4 @@ def render_savings_page():
         save_user_rows(st.session_state.get("current_user"), "savings", st.session_state[state_key], ["row_id"])
         st.success("Registros eliminados.")
         st.rerun()
+

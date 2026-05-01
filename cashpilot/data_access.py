@@ -47,6 +47,9 @@ def get_user_data_file(username: str, file_key: str) -> Path:
         "income": "ingresos.json",
         "savings": "ahorros.json",
         "monthly": "resumen_mensual.json",
+        "transactions": "transacciones.json",
+        "goals": "metas.json",
+        "categories": "categorias_custom.json",
     }
     return get_user_data_dir(username) / file_mapping.get(file_key, f"{file_key}.json")
 
@@ -74,6 +77,9 @@ def get_user_data_files(username: str):
         "income": get_user_data_file(username, "income"),
         "savings": get_user_data_file(username, "savings"),
         "monthly": get_user_data_file(username, "monthly"),
+        "transactions": get_user_data_file(username, "transactions"),
+        "goals": get_user_data_file(username, "goals"),
+        "categories": get_user_data_file(username, "categories"),
     }
 
 
@@ -121,3 +127,25 @@ def delete_user_data(username: str):
             shutil.rmtree(user_dir)
         except Exception:
             pass
+
+
+def get_user_avatar_file(username: str) -> Path:
+    return get_user_data_dir(username) / "avatar.png"
+
+
+def save_user_avatar(username: str, data: bytes):
+    avatar_path = get_user_avatar_file(username)
+    avatar_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(avatar_path, "wb") as fh:
+        fh.write(data)
+
+
+def load_user_avatar(username: str) -> bytes | None:
+    avatar_path = get_user_avatar_file(username)
+    if avatar_path.exists():
+        try:
+            with open(avatar_path, "rb") as fh:
+                return fh.read()
+        except Exception:
+            pass
+    return None

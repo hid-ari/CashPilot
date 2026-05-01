@@ -26,6 +26,13 @@ from .data_access import (
 ADMIN_ROLE = "admin"
 USER_ROLE = "user"
 
+SUPPORTED_CURRENCIES = [
+    "DOP", "USD", "EUR", "ARS", "CLP",
+    "MXN", "BRL", "COP", "PEN", "VES",
+    "GTQ", "CRC", "UYU", "PAB", "BOB",
+    "PYG", "HNL", "NIO", "SVC", "GBP",
+]
+
 MP_EXPENSE_CATEGORIES = [
     "Vivienda",
     "Servicios",
@@ -61,7 +68,18 @@ MP_DEFAULT_FIXED_ROWS = []
 MP_DEFAULT_VARIABLE_ROWS = []
 MP_DEFAULT_INCOME_ROWS = []
 MP_DEFAULT_SAVINGS_ROWS = []
+MP_DEFAULT_TRANSACTION_ROWS = []
+MP_DEFAULT_GOAL_ROWS = []
 MP_MONTHLY_COLUMNS = ["Mes", "Día", "Ingresos", "Gastos fijos", "Gastos variables", "Ahorros", "Presupuesto", "Balance", "Guardado"]
+MP_TRANSACTION_COLUMNS = ["id", "Fecha", "Tipo", "Categoria", "Descripcion", "Monto"]
+MP_GOAL_COLUMNS = ["id", "Nombre", "Categoria", "Meta", "Actual", "Fecha_limite", "Creado"]
+
+SESSION_TIMEOUT_OPTIONS = {
+    "15 minutos": 15,
+    "30 minutos": 30,
+    "1 hora": 60,
+    "Nunca": 0,
+}
 
 
 def hash_password(password: str) -> str:
@@ -191,6 +209,35 @@ def normalize_savings_rows(rows):
     return df[["row_id", "Categoria", "Descripcion", "Ahorro"]]
 
 
+def normalize_transaction_rows(rows):
+    df = pd.DataFrame(rows)
+    if df.empty:
+        df = pd.DataFrame(columns=MP_TRANSACTION_COLUMNS)
+    if "id" not in df.columns:
+        df.insert(0, "id", [new_id() for _ in range(len(df))])
+    df["Fecha"] = df.get("Fecha", pd.Series(dtype=str)).fillna("").astype(str)
+    df["Tipo"] = df.get("Tipo", pd.Series(dtype=str)).fillna("Gasto").astype(str)
+    df["Categoria"] = df.get("Categoria", pd.Series(dtype=str)).fillna("").astype(str)
+    df["Descripcion"] = df.get("Descripcion", pd.Series(dtype=str)).fillna("").astype(str)
+    df["Monto"] = pd.to_numeric(df.get("Monto", 0), errors="coerce").fillna(0.0)
+    return df[MP_TRANSACTION_COLUMNS]
+
+
+def normalize_goal_rows(rows):
+    df = pd.DataFrame(rows)
+    if df.empty:
+        df = pd.DataFrame(columns=MP_GOAL_COLUMNS)
+    if "id" not in df.columns:
+        df.insert(0, "id", [new_id() for _ in range(len(df))])
+    df["Nombre"] = df.get("Nombre", pd.Series(dtype=str)).fillna("").astype(str)
+    df["Categoria"] = df.get("Categoria", pd.Series(dtype=str)).fillna("Otros").astype(str)
+    df["Meta"] = pd.to_numeric(df.get("Meta", 0), errors="coerce").fillna(0.0)
+    df["Actual"] = pd.to_numeric(df.get("Actual", 0), errors="coerce").fillna(0.0)
+    df["Fecha_limite"] = df.get("Fecha_limite", pd.Series(dtype=str)).fillna("").astype(str)
+    df["Creado"] = df.get("Creado", pd.Series(dtype=str)).fillna("").astype(str)
+    return df[MP_GOAL_COLUMNS]
+
+
 def get_user_rows(username: str, file_key: str, default_rows, normalizer):
     return load_rows(get_user_data_file(username, file_key), normalizer, default_rows)
 
@@ -223,14 +270,98 @@ def save_monthly_rows_for_user(username: str, df: pd.DataFrame):
     save_monthly_rows(get_user_data_file(username, "monthly"), df, MP_MONTHLY_COLUMNS)
 
 
+def get_user_transactions(username: str) -> pd.DataFrame:
+    return load_rows(get_user_data_file(username, "transactions"), normalize_transaction_rows, MP_DEFAULT_TRANSACTION_ROWS)
+
+
+def save_user_transactions(username: str, df: pd.DataFrame):
+    save_rows(get_user_data_file(username, "transactions"), df, ["id"])
+
+
+def get_user_goals(username: str) -> pd.DataFrame:
+    return load_rows(get_user_data_file(username, "goals"), normalize_goal_rows, MP_DEFAULT_GOAL_ROWS)
+
+
+def save_user_goals(username: str, df: pd.DataFrame):
+    save_rows(get_user_data_file(username, "goals"), df, ["id"])
+
+
+def get_user_custom_categories(username: str) -> dict:
+    from .data_access import read_json
+    return read_json(
+        get_user_data_file(username, "categories"),
+        {"expense": [], "income": [], "savings": []},
+    )
+
+
+def save_user_custom_categories(username: str, categories: dict):
+    from .data_access import write_json
+    write_json(get_user_data_file(username, "categories"), categories)
+
+
+def get_all_expense_categories(username: str) -> list[str]:
+    custom = get_user_custom_categories(username).get("expense", [])
+    return MP_EXPENSE_CATEGORIES + [c for c in custom if c not in MP_EXPENSE_CATEGORIES]
+
+
+def get_all_income_categories(username: str) -> list[str]:
+    custom = get_user_custom_categories(username).get("income", [])
+    return MP_INCOME_CATEGORIES + [c for c in custom if c not in MP_INCOME_CATEGORIES]
+
+
+def get_all_savings_categories(username: str) -> list[str]:
+    custom = get_user_custom_categories(username).get("savings", [])
+    return MP_SAVINGS_CATEGORIES + [c for c in custom if c not in MP_SAVINGS_CATEGORIES]
+
+
 def format_currency(amount: float, currency: str = "DOP") -> str:
     return f"{currency} {amount:,.2f}"
+
+
+def get_budget_alerts(fixed_df: pd.DataFrame, variable_df: pd.DataFrame) -> list[dict]:
+    alerts = []
+    for df, label in [(fixed_df, "Fijo"), (variable_df, "Variable")]:
+        if df.empty:
+            continue
+        for _, row in df.iterrows():
+            budget = float(row.get("Presupuesto", 0))
+            actual = float(row.get("Actual", 0))
+            cat = str(row.get("Categoria", ""))
+            desc = str(row.get("Descripcion", ""))
+            name = desc if desc else cat
+            if not name:
+                continue
+            if budget <= 0:
+                continue
+            pct = actual / budget * 100
+            if pct >= 100:
+                alerts.append({"name": name, "pct": pct, "level": "error", "label": label})
+            elif pct >= 80:
+                alerts.append({"name": name, "pct": pct, "level": "warning", "label": label})
+    return alerts
+
+
+def calculate_savings_rate(income_total: float, savings_total: float) -> float:
+    if income_total <= 0:
+        return 0.0
+    return round(savings_total / income_total * 100, 1)
+
+
+def calculate_monthly_projection(actual_expenses: float, current_day: int, days_in_month: int) -> float:
+    if current_day <= 0:
+        return 0.0
+    return round(actual_expenses / current_day * days_in_month, 2)
+
+
+def get_days_in_month(year: int, month: int) -> int:
+    import calendar
+    return calendar.monthrange(year, month)[1]
 
 
 def get_all_users_documents_status(users):
     rows = []
     for username in sorted(users.keys()):
-        for doc_key, doc_label in [("settings", "Perfil"), ("fixed", "Gastos fijos"), ("variable", "Gastos variables"), ("income", "Ingresos"), ("savings", "Ahorros"), ("monthly", "Resumen mensual")]:
+        for doc_key, doc_label in [("settings", "Perfil"), ("fixed", "Gastos fijos"), ("variable", "Gastos variables"), ("income", "Ingresos"), ("savings", "Ahorros"), ("monthly", "Resumen mensual"), ("transactions", "Transacciones"), ("goals", "Metas")]:
             file_path = get_user_settings_file(username) if doc_key == "settings" else get_user_data_file(username, doc_key)
             exists = file_path.exists()
             if exists:
@@ -285,3 +416,4 @@ def build_monthly_record(month_name: str, day_value: int, incomes: float, fixed_
         "Balance": balance,
         "Guardado": saved_at,
     }
+

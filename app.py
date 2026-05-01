@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 
 import streamlit as st
 
@@ -6,8 +7,11 @@ from cashpilot.business import (
     MP_DEFAULT_FIXED_ROWS,
     MP_DEFAULT_INCOME_ROWS,
     MP_DEFAULT_SAVINGS_ROWS,
+    MP_DEFAULT_TRANSACTION_ROWS,
     MP_DEFAULT_VARIABLE_ROWS,
+    SESSION_TIMEOUT_OPTIONS,
     delete_current_user_data,
+    format_currency,
     get_monthly_rows,
     get_user_profile,
     get_user_rows,
@@ -23,10 +27,13 @@ from cashpilot.data_access import DATA_FILE, SETTINGS_FILE
 from cashpilot.screens import (
     render_admin_panel,
     render_expense_page,
+    render_goals_page,
     render_home_page,
     render_income_page,
+    render_onboarding,
     render_profile_panel,
     render_savings_page,
+    render_transactions_page,
 )
 from cashpilot.ui import render_sidebar_navigation
 
@@ -102,6 +109,49 @@ def mp_init_state():
         st.session_state.mp_state_owner = current_user
 
 
+def check_session_timeout():
+    """Auto-logout if the user has been idle longer than their configured timeout."""
+    profile = st.session_state.get("profile", {})
+    timeout_minutes = profile.get("session_timeout_minutes", 0)
+    if timeout_minutes <= 0:
+        # Update last activity even when timeout is disabled so it's ready if changed
+        st.session_state["last_activity"] = datetime.now().isoformat()
+        return
+
+    last = st.session_state.get("last_activity")
+    now = datetime.now()
+    if last:
+        try:
+            elapsed = (now - datetime.fromisoformat(last)).total_seconds() / 60
+            if elapsed > timeout_minutes:
+                username = st.session_state.get("current_user")
+                st.session_state.current_user = None
+                st.warning(f"Sesión cerrada por inactividad ({timeout_minutes} min).")
+                st.rerun()
+        except Exception:
+            pass
+    st.session_state["last_activity"] = now.isoformat()
+
+
+def show_login_summary():
+    """Show a quick summary of the current month at the top of the sidebar after login."""
+    username = st.session_state.get("current_user")
+    if not username:
+        return
+    monthly_df = get_monthly_rows(username)
+    if monthly_df.empty:
+        return
+    profile = st.session_state.get("profile", {})
+    currency = profile.get("currency", "DOP")
+    latest = monthly_df.sort_values("Guardado").iloc[-1]
+    gastos = float(latest.get("Gastos fijos", 0)) + float(latest.get("Gastos variables", 0))
+    presupuesto = float(latest.get("Presupuesto", 0))
+    pct = gastos / presupuesto * 100 if presupuesto > 0 else 0
+    st.sidebar.divider()
+    st.sidebar.caption(f"**Último guardado:** {latest.get('Mes', '')} día {latest.get('Día', '')}")
+    st.sidebar.caption(f"Gastos: {format_currency(gastos, currency)} ({pct:.0f}% presupuesto)")
+
+
 def delete_app_data():
     username = st.session_state.get("current_user")
     if username:
@@ -130,6 +180,7 @@ def login_register_page():
             success, message = login_user(login_username, login_password)
             if success:
                 st.session_state.current_user = login_username
+                st.session_state["last_activity"] = datetime.now().isoformat()
                 st.success(message)
                 st.rerun()
             else:
@@ -169,6 +220,14 @@ def mp_savings_page():
     return render_savings_page()
 
 
+def mp_transactions_page():
+    return render_transactions_page()
+
+
+def mp_goals_page():
+    return render_goals_page()
+
+
 def build_profile_panel():
     return render_profile_panel()
 
@@ -179,6 +238,11 @@ def build_admin_panel():
 
 def mp_sidebar_page():
     return render_sidebar_navigation(st.session_state.get("current_user"))
+
+
+def needs_onboarding() -> bool:
+    profile = st.session_state.get("profile", {})
+    return not profile.get("onboarding_complete", False)
 
 
 def main():
@@ -194,8 +258,16 @@ def main():
 
     mp_init_state()
     init_profile_state()
+    check_session_timeout()
+
+    # First-time onboarding wizard
+    if needs_onboarding():
+        done = render_onboarding()
+        if not done:
+            return
 
     page = mp_sidebar_page()
+    show_login_summary()
 
     if page == "Home":
         mp_home_page()
@@ -207,6 +279,10 @@ def main():
         mp_income_page()
     elif page == "Ahorros":
         mp_savings_page()
+    elif page == "Transacciones":
+        mp_transactions_page()
+    elif page == "Metas":
+        mp_goals_page()
     elif page == "Perfil":
         build_profile_panel()
     elif page == "Admin":
@@ -218,3 +294,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
