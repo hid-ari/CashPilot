@@ -37,6 +37,8 @@ from cashpilot.screens import (
 )
 from cashpilot.ui import render_sidebar_navigation
 
+DEFAULT_LOCAL_USER = os.environ.get("CASHPILOT_DEFAULT_USER", "local_user")
+
 
 def apply_space_mono_font():
     st.markdown(
@@ -249,12 +251,9 @@ def main():
     st.set_page_config(page_title="CashPilot", layout="wide")
     apply_space_mono_font()
 
-    if "current_user" not in st.session_state:
-        st.session_state.current_user = None
-
-    if not st.session_state.current_user:
-        login_register_page()
-        return
+    if "current_user" not in st.session_state or not st.session_state.current_user:
+        st.session_state.current_user = DEFAULT_LOCAL_USER
+        st.session_state["last_activity"] = datetime.now().isoformat()
 
     mp_init_state()
     init_profile_state()
@@ -294,4 +293,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
